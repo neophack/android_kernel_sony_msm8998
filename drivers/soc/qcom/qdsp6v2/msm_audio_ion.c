@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,7 @@
 #include <linux/export.h>
 #include <linux/qcom_iommu.h>
 #include <asm/dma-iommu.h>
+#include <soc/qcom/secure_buffer.h>
 
 #define MSM_AUDIO_ION_PROBED (1 << 0)
 
@@ -177,6 +178,87 @@ err:
 	return rc;
 }
 EXPORT_SYMBOL(msm_audio_ion_alloc);
+
+static int msm_audio_hyp_assign(ion_phys_addr_t *paddr, size_t *pa_len,
+				u8 assign_type)
+{
+	int srcVM[1] = {VMID_HLOS};
+	int destVM[1] = {VMID_CP_ADSP_SHARED};
+	int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
+	int ret = 0;
+
+	switch (assign_type) {
+	case HLOS_TO_ADSP:
+		srcVM[0] = VMID_HLOS;
+		destVM[0] = VMID_CP_ADSP_SHARED;
+		break;
+	case ADSP_TO_HLOS:
+		srcVM[0] = VMID_CP_ADSP_SHARED;
+		destVM[0] = VMID_HLOS;
+		break;
+	default:
+		pr_err("%s: Invalid assign type = %d\n", __func__, assign_type);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ret = hyp_assign_phys(*paddr, *pa_len, srcVM, 1, destVM, destVMperm, 1);
+	if (ret)
+		pr_err("%s: hyp_assign_phys failed for type %d, rc = %d\n",
+			 __func__, assign_type, ret);
+done:
+	return ret;
+}
+
+int msm_audio_ion_phys_assign(const char *name, int fd, ion_phys_addr_t *paddr,
+			      size_t *pa_len, u8 assign_type)
+{
+	struct ion_client *client;
+	struct ion_handle *handle;
+	int ret;
+
+	if (!(msm_audio_ion_data.device_status & MSM_AUDIO_ION_PROBED)) {
+		pr_debug("%s:probe is not done, deferred\n", __func__);
+		return -EPROBE_DEFER;
+	}
+
+	if (!name || !paddr || !pa_len) {
+		pr_err("%s: Invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	client = msm_audio_ion_client_create(name);
+	if (IS_ERR_OR_NULL((void *)(client))) {
+		pr_err("%s: ION create client failed\n", __func__);
+		return -EINVAL;
+	}
+
+	handle = ion_import_dma_buf(client, fd);
+	if (IS_ERR_OR_NULL((void *) (handle))) {
+		pr_err("%s: ion import dma buffer failed\n",
+			__func__);
+		ret = -EINVAL;
+		goto err_destroy_client;
+	}
+
+	ret = ion_phys(client, handle, paddr, pa_len);
+	if (ret) {
+		pr_err("%s: could not get physical address for handle, ret = %d\n",
+			__func__, ret);
+		goto err_ion_handle;
+	}
+	pr_debug("%s: ION Physical address is %x\n", __func__, (u32)*paddr);
+
+	ret = msm_audio_hyp_assign(paddr, pa_len, assign_type);
+
+err_ion_handle:
+	ion_free(client, handle);
+
+err_destroy_client:
+	ion_client_destroy(client);
+
+	return ret;
+}
 
 int msm_audio_ion_import(const char *name, struct ion_client **client,
 			struct ion_handle **handle, int fd,
@@ -791,60 +873,6 @@ u32 msm_audio_populate_upper_32_bits(ion_phys_addr_t pa)
 		return upper_32_bits(pa);
 }
 
-static int msm_audio_ion_smmu_probe(struct device *dev)
-{
-	struct of_phandle_args iommuspec;
-	bool smmu_force_sid;
-	u64 smmu_sid = 0;
-	int rc = 0;
-
-	smmu_force_sid = !!of_find_property(dev->of_node,
-				"qcom,smmu-force-sid", NULL);
-
-	if (smmu_force_sid) {
-		rc = of_property_read_u64(dev->of_node,
-				"qcom,smmu-force-sid", &smmu_sid);
-		if (rc) {
-			dev_err(dev,
-				"%s: Invalid smmu-force-sid property value\n",
-				__func__);
-			return rc;
-		}
-	} else {
-		/* Get SMMU SID information from Devicetree */
-		rc = of_parse_phandle_with_args(dev->of_node, "iommus",
-						"#iommu-cells", 0, &iommuspec);
-		if (rc)
-			dev_err(dev, "%s: could not get smmu SID, ret = %d\n",
-				__func__, rc);
-		else
-			smmu_sid = iommuspec.args[0];
-	}
-
-	pr_err("msm_audio_ion sid bit is 0x%llx\n", smmu_sid);
-
-	msm_audio_ion_data.smmu_sid_bits =
-		smmu_sid << MSM_AUDIO_SMMU_SID_OFFSET;
-
-	/* Give a chance to DMA APIs to register an IOMMU master */
-	of_dma_configure(dev, dev->of_node);
-
-	if (msm_audio_ion_data.smmu_version == 0x1) {
-		rc = msm_audio_smmu_init_legacy(dev);
-	} else if (msm_audio_ion_data.smmu_version == 0x2) {
-		rc = msm_audio_smmu_init(dev);
-	} else {
-		dev_err(dev, "%s: smmu version invalid %d\n",
-			__func__, msm_audio_ion_data.smmu_version);
-		rc = -EINVAL;
-	}
-	if (rc)
-		dev_err(dev, "%s: smmu init failed, err = %d\n",
-			__func__, rc);
-
-	return rc;
-}
-
 static int msm_audio_ion_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -887,17 +915,41 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 		} else {
 			dev_dbg(dev, "%s: adsp is ready\n", __func__);
 		}
-
-		rc = msm_audio_ion_smmu_probe(dev);
-		if (rc) {
-			dev_err(dev, "FATAL: cannot probe SMMU: %d", rc);
-			goto end;
-		}
 	}
 
 	dev_dbg(dev, "%s: SMMU is %s\n", __func__,
 		(smmu_enabled) ? "Enabled" : "Disabled");
-end:
+
+	if (smmu_enabled) {
+		u64 smmu_sid = 0;
+		struct of_phandle_args iommuspec;
+
+		/* Get SMMU SID information from Devicetree */
+		rc = of_parse_phandle_with_args(dev->of_node, "iommus",
+						"#iommu-cells", 0, &iommuspec);
+		if (rc)
+			dev_err(dev, "%s: could not get smmu SID, ret = %d\n",
+				__func__, rc);
+		else
+			smmu_sid = iommuspec.args[0];
+
+		msm_audio_ion_data.smmu_sid_bits =
+			smmu_sid << MSM_AUDIO_SMMU_SID_OFFSET;
+
+		if (msm_audio_ion_data.smmu_version == 0x1) {
+			rc = msm_audio_smmu_init_legacy(dev);
+		} else if (msm_audio_ion_data.smmu_version == 0x2) {
+			rc = msm_audio_smmu_init(dev);
+		} else {
+			dev_err(dev, "%s: smmu version invalid %d\n",
+				__func__, msm_audio_ion_data.smmu_version);
+			rc = -EINVAL;
+		}
+		if (rc)
+			dev_err(dev, "%s: smmu init failed, err = %d\n",
+				__func__, rc);
+	}
+
 	if (!rc)
 		msm_audio_ion_data.device_status |= MSM_AUDIO_ION_PROBED;
 

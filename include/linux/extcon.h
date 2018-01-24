@@ -22,6 +22,11 @@
  * GNU General Public License for more details.
  *
 */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef __LINUX_EXTCON_H__
 #define __LINUX_EXTCON_H__
@@ -72,12 +77,10 @@
 #define EXTCON_JIG		61
 #define EXTCON_MECHANICAL	62
 
-#ifdef CONFIG_EXTCON_SOMC_EXTENSION
+/* Somc Extention */
 #define EXTCON_VBUS_DROP	63
+
 #define EXTCON_NUM		64
-#else
-#define EXTCON_NUM		63
-#endif
 
 struct extcon_cable;
 

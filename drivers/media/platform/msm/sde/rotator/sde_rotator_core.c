@@ -515,6 +515,12 @@ static int sde_rotator_import_buffer(struct sde_layer_buffer *buffer,
 	if (!input)
 		dir = DMA_FROM_DEVICE;
 
+	if (buffer->plane_count > SDE_ROT_MAX_PLANES) {
+		SDEROT_ERR("buffer plane_count exceeds MAX_PLANE limit:%d\n",
+				buffer->plane_count);
+		return -EINVAL;
+	}
+
 	memset(planes, 0, sizeof(planes));
 
 	for (i = 0; i < buffer->plane_count; i++) {
@@ -615,9 +621,10 @@ static int sde_rotator_secure_session_ctrl(bool enable)
 	if (mdata->wait_for_transition && mdata->secure_session_ctrl &&
 		mdata->callback_request) {
 		ret = mdata->wait_for_transition(mdata->sec_cam_en, enable);
-		if (ret) {
+		if (ret < 0) {
 			SDEROT_ERR("failed Secure wait for transition %d\n",
 				   ret);
+			ret = -EPERM;
 		} else {
 			if (mdata->sec_cam_en ^ enable) {
 				mdata->sec_cam_en = enable;
@@ -1108,6 +1115,8 @@ static int sde_rotator_assign_queue(struct sde_rot_mgr *mgr,
 		if (IS_ERR_OR_NULL(hw)) {
 			SDEROT_ERR("fail to allocate hw\n");
 			ret = PTR_ERR(hw);
+			if (!ret)
+				ret = -EINVAL;
 		} else {
 			queue->hw = hw;
 		}
@@ -1994,10 +2003,8 @@ static void sde_rotator_cancel_request(struct sde_rot_mgr *mgr,
 		sde_rot_mgr_unlock(mgr);
 		for (i = req->count - 1; i >= 0; i--) {
 			entry = req->entries + i;
-			if (entry->commitq)
-				flush_kthread_worker(&entry->commitq->rot_kw);
-			if (entry->doneq)
-				flush_kthread_worker(&entry->doneq->rot_kw);
+			flush_kthread_worker(&entry->commitq->rot_kw);
+			flush_kthread_worker(&entry->doneq->rot_kw);
 		}
 		sde_rot_mgr_lock(mgr);
 		SDEROT_DBG("cancel work done\n");

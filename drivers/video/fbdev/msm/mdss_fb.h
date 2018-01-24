@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef MDSS_FB_H
 #define MDSS_FB_H
@@ -56,6 +61,13 @@
 
 #define MDP_PP_AD_BL_LINEAR	0x0
 #define MDP_PP_AD_BL_LINEAR_INV	0x1
+
+/* Enables Sonys feature Early Unblank for quick wakeup */
+#define SOMC_FEATURE_EARLY_UNBLANK
+
+#ifdef SOMC_FEATURE_EARLY_UNBLANK
+#include <linux/workqueue.h>
+#endif /* SOMC_FEATURE_EARLY_UNBLANK */
 
 /**
  * enum mdp_notify_event - Different frame events to indicate frame update state
@@ -243,8 +255,8 @@ struct msm_mdp_interface {
 				do_div(out, 2 * max_bright);\
 				} while (0)
 #define MDSS_BL_TO_BRIGHT(out, v, bl_max, max_bright) do {\
-				out = ((v) * (max_bright));\
-				do_div(out, bl_max);\
+				out = (2 * ((v) * (max_bright)) + (bl_max));\
+				do_div(out, 2 * bl_max);\
 				} while (0)
 
 struct mdss_fb_file_info {
@@ -263,6 +275,12 @@ struct msm_fb_fps_info {
 	ktime_t last_sampled_time_us;
 	u32 measured_fps;
 };
+
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+struct fb_specific_data {
+	bool off_sts;
+};
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 struct msm_fb_data_type {
 	u32 key;
@@ -366,9 +384,17 @@ struct msm_fb_data_type {
 	int fb_mmap_type;
 	struct led_trigger *boot_notification_led;
 
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-	bool suspend_avoided;
+	/* Following is used for dynamic mode switch */
+	enum dyn_mode_switch_state switch_state;
+	u32 switch_new_mode;
+	bool pending_switch;
+	struct mutex switch_lock;
+	struct input_handler *input_handler;
 
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	struct fb_specific_data spec_mfd;
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
+#ifdef SOMC_FEATURE_EARLY_UNBLANK
 	/* speed up wakeup */
 	/* do unblank (>150ms) on own kworker
 	 * so we don't starve other works
@@ -376,17 +402,7 @@ struct msm_fb_data_type {
 	struct workqueue_struct *unblank_kworker;
 	struct work_struct unblank_work;
 	bool early_unblank_completed;
- #ifdef CONFIG_SOMC_PANEL_INCELL
-	bool off_sts;
- #endif
-#endif
-
-	/* Following is used for dynamic mode switch */
-	enum dyn_mode_switch_state switch_state;
-	u32 switch_new_mode;
-	bool pending_switch;
-	struct mutex switch_lock;
-	struct input_handler *input_handler;
+#endif /* SOMC_FEATURE_EARLY_UNBLANK */
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
@@ -402,10 +418,16 @@ static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
 		if (mfd->no_update.timer.function)
 			del_timer(&(mfd->no_update.timer));
 
-		mfd->no_update.timer.expires = jiffies + msecs_to_jiffies(2000);
+		mfd->no_update.timer.expires = jiffies + (2 * HZ);
 		add_timer(&mfd->no_update.timer);
 		mutex_unlock(&mfd->no_update.lock);
 	}
+}
+
+/* Function returns true for split link */
+static inline bool is_panel_split_link(struct msm_fb_data_type *mfd)
+{
+	return mfd && mfd->panel_info && mfd->panel_info->split_link_enabled;
 }
 
 /* Function returns true for either any kind of dual display */

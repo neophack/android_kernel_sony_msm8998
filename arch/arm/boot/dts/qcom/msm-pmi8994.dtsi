@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -397,7 +397,6 @@
 			reg = <0xb100 0x100>,
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
-			qcom,lpg-lut-size = <0x7e>;
 			qcom,channel-id = <0>;
 			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <0>;
@@ -409,7 +408,6 @@
 			reg = <0xb200 0x100>,
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
-			qcom,lpg-lut-size = <0x7e>;
 			qcom,channel-id = <1>;
 			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <1>;
@@ -421,7 +419,6 @@
 			reg = <0xb300 0x100>,
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
-			qcom,lpg-lut-size = <0x7e>;
 			qcom,channel-id = <2>;
 			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <2>;
@@ -433,7 +430,6 @@
 			reg = <0xb400 0x100>,
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
-			qcom,lpg-lut-size = <0x7e>;
 			qcom,channel-id = <3>;
 			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <3>;
@@ -538,6 +534,7 @@
 			qcom,sync-dly-us = <800>;
 			qcom,fs-curr-ua = <25000>;
 			qcom,cons-sync-write-delay-us = <1000>;
+			qcom,en-phase-stag;
 			qcom,led-strings-list = [00 01 02 03];
 			qcom,en-ext-pfet-sc-pro;
 			qcom,pmic-revid = <&pmi8994_revid>;
@@ -547,11 +544,10 @@
 			status = "disabled";
 			compatible = "qcom,qpnp-haptic";
 			reg = <0xc000 0x100>;
-			interrupts = <0x3 0xc0 0x0 IRQ_TYPE_NONE>,
-				     <0x3 0xc0 0x1 IRQ_TYPE_NONE>;
+			interrupts = <0x3 0xc0 0x0 IRQ_TYPE_EDGE_BOTH>,
+				     <0x3 0xc0 0x1 IRQ_TYPE_EDGE_BOTH>;
 			interrupt-names = "sc-irq", "play-irq";
 			vcc_pon-supply = <&pon_perph_reg>;
-			qcom,pmic-revid = <&pmi8994_revid>;
 			qcom,play-mode = "direct";
 			qcom,wave-play-rate-us = <5263>;
 			qcom,actuator-type = "lra";
@@ -562,8 +558,6 @@
 			qcom,int-pwm-freq-khz = <505>;
 			qcom,en-brake;
 			qcom,brake-pattern = [03 03 00 00];
-			qcom,use-play-irq;
-			qcom,use-sc-irq;
 			qcom,wave-samples = [3e 3e 3e 3e 3e 3e 3e 3e];
 			qcom,wave-rep-cnt = <1>;
 			qcom,wave-samp-rep-cnt = <1>;

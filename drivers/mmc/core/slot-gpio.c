@@ -2,11 +2,15 @@
  * Generic GPIO card-detect helper
  *
  * Copyright (C) 2011, Guennadi Liakhovetski <g.liakhovetski@gmx.de>
- * Copyright (C) 2015 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
  */
 
 #include <linux/err.h>
@@ -27,12 +31,11 @@ struct mmc_gpio {
 	bool override_ro_active_level;
 	bool override_cd_active_level;
 	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
-	char *ro_label;
-	char cd_label[0];
 	bool status;
 	int uim2_gpio;
-#ifdef CONFIG_MMC_SD_DEFERRED_RESUME
-	bool pending_detect;
+	char *ro_label;
+	char cd_label[0];
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	bool suspended;
 #endif
 };
@@ -51,8 +54,8 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_MMC_SD_DEFERRED_RESUME
-void mmc_cd_prepare_suspend(struct mmc_host *host, bool pending_detect)
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+void mmc_cd_prepare_suspend(struct mmc_host *host)
 {
 	struct mmc_gpio *ctx = host->slot.handler_priv;
 
@@ -60,20 +63,8 @@ void mmc_cd_prepare_suspend(struct mmc_host *host, bool pending_detect)
 		return;
 
 	ctx->suspended = true;
-	ctx->pending_detect = pending_detect;
 }
 EXPORT_SYMBOL(mmc_cd_prepare_suspend);
-
-bool mmc_cd_is_pending_detect(struct mmc_host *host)
-{
-	struct mmc_gpio *ctx = host->slot.handler_priv;
-
-	if (!ctx)
-		return false;
-
-	return ctx->pending_detect;
-}
-EXPORT_SYMBOL(mmc_cd_is_pending_detect);
 #endif
 
 static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
@@ -82,7 +73,7 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 	struct mmc_host *host = dev_id;
 	struct mmc_gpio *ctx = host->slot.handler_priv;
 	int status;
-#ifdef CONFIG_MMC_SD_DEFERRED_RESUME
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	unsigned long flags;
 #endif
 
@@ -104,7 +95,7 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 		ctx->status = status;
 
 		host->trigger_card_event = true;
-#ifdef CONFIG_MMC_SD_DEFERRED_RESUME
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 		if (ctx->suspended) {
 			/*
 			 * host->rescan_disable is normally set to 0 in
@@ -118,6 +109,7 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 		}
 		ctx->suspended = false;
 #endif
+
 		/* Schedule a card detection after a debounce timeout */
 		mmc_detect_change(host, msecs_to_jiffies(200));
 	}
@@ -222,6 +214,12 @@ void mmc_gpiod_request_cd_irq(struct mmc_host *host)
 	if (irq >= 0 && host->caps & MMC_CAP_NEEDS_POLL)
 		irq = -EINVAL;
 
+	ret = mmc_gpio_get_status(host);
+	if (ret < 0)
+		pr_warn("%s: failed to init cd_gpio status\n", mmc_hostname(host));
+	else
+		ctx->status = ret;
+
 	if (irq >= 0) {
 		if (!ctx->cd_gpio_isr)
 			ctx->cd_gpio_isr = mmc_gpio_cd_irqt;
@@ -292,8 +290,8 @@ int mmc_gpio_request_cd(struct mmc_host *host, unsigned int gpio,
 
 	ctx->override_cd_active_level = true;
 	ctx->cd_gpio = gpio_to_desc(gpio);
-#ifdef CONFIG_MMC_SD_DEFERRED_RESUME
-	ctx->pending_detect = false;
+
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	ctx->suspended = false;
 #endif
 	return 0;
@@ -392,6 +390,7 @@ int mmc_gpiod_request_ro(struct mmc_host *host, const char *con_id,
 	return 0;
 }
 EXPORT_SYMBOL(mmc_gpiod_request_ro);
+
 
 void mmc_gpio_init_uim2(struct mmc_host *host, unsigned int gpio)
 {

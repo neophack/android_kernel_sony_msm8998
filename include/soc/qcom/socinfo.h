@@ -80,20 +80,16 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,fsm9010")
 #define early_machine_is_msm8976()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8976")
-#define early_machine_is_msm8956()	\
-	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8956")
-#define early_machine_is_msm8952()	\
-	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8952")
+#define early_machine_is_msmtellurium()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmtellurium")
 #define early_machine_is_msm8996()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8996")
-#define early_machine_is_msm8996_auto()	\
-	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8996-cdp")
 #define early_machine_is_msm8929()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8929")
 #define early_machine_is_msm8998()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8998")
-#define early_machine_is_apq8998()	\
-	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,apq8998")
+#define early_machine_is_apq8098()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,apq8098")
 #define early_machine_is_msmhamster()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmhamster")
 #define early_machine_is_sdm660()	\
@@ -137,13 +133,12 @@
 #define early_machine_is_mdm9630()	0
 #define early_machine_is_fsm9900()	0
 #define early_machine_is_fsm9010()	0
-#define early_machine_is_msm8952()	0
+#define early_machine_is_msmtellurium()	0
 #define early_machine_is_msm8996()	0
 #define early_machine_is_msm8976() 0
-#define early_machine_is_msm8956()	0
 #define early_machine_is_msm8929()	0
 #define early_machine_is_msm8998()	0
-#define early_machine_is_apq8998()	0
+#define early_machine_is_apq8098()	0
 #define early_machine_is_msmhamster()	0
 #define early_machine_is_sdm660()	0
 #define early_machine_is_sda660()	0
@@ -203,10 +198,9 @@ enum msm_cpu {
 	MSM_CPU_8994,
 	MSM_CPU_8992,
 	FSM_CPU_9010,
-	MSM_CPU_8952,
+	MSM_CPU_TELLURIUM,
 	MSM_CPU_8996,
 	MSM_CPU_8976,
-	MSM_CPU_8956,
 	MSM_CPU_8929,
 	MSM_CPU_8998,
 	MSM_CPU_HAMSTER,

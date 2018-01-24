@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,6 +8,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
  */
 
 #include <linux/module.h>
@@ -29,6 +34,7 @@
 #include <linux/wait.h>
 #include <soc/qcom/scm.h>
 #include <soc/qcom/memory_dump.h>
+#include <soc/qcom/minidump.h>
 #include <soc/qcom/watchdog.h>
 
 #define MODULE_NAME "msm_watchdog"
@@ -133,6 +139,8 @@ static int msm_watchdog_suspend(struct device *dev)
 		return 0;
 	__raw_writel(1, wdog_dd->base + WDT0_RST);
 	if (wdog_dd->wakeup_irq_enable) {
+		/* Make sure register write is complete before proceeding */
+		mb();
 		wdog_dd->last_pet = sched_clock();
 		return 0;
 	}
@@ -147,8 +155,15 @@ static int msm_watchdog_resume(struct device *dev)
 {
 	struct msm_watchdog_data *wdog_dd =
 			(struct msm_watchdog_data *)dev_get_drvdata(dev);
-	if (!enable || wdog_dd->wakeup_irq_enable)
+	if (!enable)
 		return 0;
+	if (wdog_dd->wakeup_irq_enable) {
+		__raw_writel(1, wdog_dd->base + WDT0_RST);
+		/* Make sure register write is complete before proceeding */
+		mb();
+		wdog_dd->last_pet = sched_clock();
+		return 0;
+	}
 	__raw_writel(1, wdog_dd->base + WDT0_EN);
 	__raw_writel(1, wdog_dd->base + WDT0_RST);
 	mb();
@@ -434,31 +449,6 @@ static struct notifier_block wdog_cpu_pm_nb = {
 	.notifier_call = wdog_cpu_pm_notify,
 };
 
-static struct device *dev;
-static int wdog_init_done;
-
-#ifndef CONFIG_HARDLOCKUP_DETECTOR
-void touch_nmi_watchdog(void)
-{
-	unsigned long long ns;
-	unsigned long delay_time;
-	struct msm_watchdog_data *wdog_dd =
-			(struct msm_watchdog_data *)dev_get_drvdata(dev);
-
-	if (!wdog_dd || !wdog_init_done)
-		return;
-
-	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
-
-	ns = sched_clock() - wdog_dd->last_pet;
-	if (nsecs_to_jiffies(ns) > delay_time)
-		pet_watchdog(wdog_dd);
-
-	touch_softlockup_watchdog();
-}
-EXPORT_SYMBOL(touch_nmi_watchdog);
-#endif
-
 static int msm_watchdog_remove(struct platform_device *pdev)
 {
 	struct msm_watchdog_data *wdog_dd =
@@ -515,6 +505,10 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 		wdog_dd->last_pet, nanosec_rem / 1000);
 	if (wdog_dd->do_ipi_ping)
 		dump_cpu_alive_mask(wdog_dd);
+#ifdef CONFIG_MSM_FORCE_PANIC_ON_WDOG_BARK
+	/*Causing a panic instead of a watchdog bite */
+	panic("Watchdog bark triggered!");
+#endif
 	msm_trigger_wdog_bite();
 	panic("Failed to cause a watchdog bite! - Falling back to kernel panic!");
 	return IRQ_HANDLED;
@@ -546,6 +540,8 @@ void register_scan_dump(struct msm_watchdog_data *wdog_dd)
 
 	dump_data->addr = virt_to_phys(dump_addr);
 	dump_data->len = wdog_dd->scandump_size;
+	strlcpy(dump_data->name, "KSCANDUMP", sizeof(dump_data->name));
+
 	dump_entry.id = MSM_DUMP_DATA_SCANDUMP;
 	dump_entry.addr = virt_to_phys(dump_data);
 	ret = msm_dump_data_register(MSM_DUMP_TABLE_APPS, &dump_entry);
@@ -630,6 +626,9 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 			cpu_data[cpu].addr = virt_to_phys(cpu_buf +
 							cpu * MAX_CPU_CTX_SIZE);
 			cpu_data[cpu].len = MAX_CPU_CTX_SIZE;
+			snprintf(cpu_data[cpu].name, sizeof(cpu_data[cpu].name),
+				"KCPU_CTX%d", cpu);
+
 			dump_entry.id = MSM_DUMP_DATA_CPU_CTX + cpu;
 			dump_entry.addr = virt_to_phys(&cpu_data[cpu]);
 			ret = msm_dump_data_register(MSM_DUMP_TABLE_APPS,
@@ -746,8 +745,6 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 		enable_percpu_irq(wdog_dd->bark_irq, 0);
 	if (ipi_opt_en)
 		cpu_pm_register_notifier(&wdog_cpu_pm_nb);
-	dev = wdog_dd->dev;
-	wdog_init_done = 1;
 	dev_info(wdog_dd->dev, "MSM Watchdog Initialized\n");
 	return;
 }
@@ -847,6 +844,7 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct msm_watchdog_data *wdog_dd;
+	struct md_region md_entry;
 
 	if (!pdev->dev.of_node || !enable)
 		return -ENODEV;
@@ -868,6 +866,15 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 		goto err;
 	}
 	init_watchdog_data(wdog_dd);
+
+	/* Add wdog info to minidump table */
+	strlcpy(md_entry.name, "KWDOGDATA", sizeof(md_entry.name));
+	md_entry.virt_addr = (uintptr_t)wdog_dd;
+	md_entry.phys_addr = virt_to_phys(wdog_dd);
+	md_entry.size = sizeof(*wdog_dd);
+	if (msm_minidump_add_region(&md_entry))
+		pr_info("Failed to add RTB in Minidump\n");
+
 	return 0;
 err:
 	kzfree(wdog_dd);

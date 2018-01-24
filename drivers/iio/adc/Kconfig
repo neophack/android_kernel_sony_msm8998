@@ -318,14 +318,6 @@ config QCOM_RRADC
 	  To compile this driver as a module, choose M here: the module will
 	  be called qcom-rradc.
 
-config SOMC_RRADC_EXTENSION
-	bool "SoMC Extension for QC PMIC Round Robin ADC"
-	depends on QCOM_RRADC
-	default y if ARCH_SONY_YOSHINO
-	help
-	  This is additional code from SoMC for RRADC. Adds a DT
-	  property for custom RRADC registers configuration.
-
 config QCOM_TADC
 	tristate "Qualcomm Technologies Inc. TADC driver"
 	depends on MFD_I2C_PMIC
@@ -341,6 +333,7 @@ config QCOM_TADC
 config ROCKCHIP_SARADC
 	tristate "Rockchip SARADC driver"
 	depends on ARCH_ROCKCHIP || (ARM && COMPILE_TEST)
+	depends on RESET_CONTROLLER
 	help
 	  Say yes here to build support for the SARADC found in SoCs from
 	  Rockchip.

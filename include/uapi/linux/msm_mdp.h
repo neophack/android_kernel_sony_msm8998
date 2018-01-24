@@ -1,3 +1,8 @@
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 #ifndef _UAPI_MSM_MDP_H_
 #define _UAPI_MSM_MDP_H_
 
@@ -112,7 +117,6 @@
 #define MDSS_MDP_HW_REV_109	MDSS_MDP_REV(1, 9, 0) /* 8994 v2.0 */
 #define MDSS_MDP_HW_REV_110	MDSS_MDP_REV(1, 10, 0) /* 8992 v1.0 */
 #define MDSS_MDP_HW_REV_200	MDSS_MDP_REV(2, 0, 0) /* 8092 v1.0 */
-#define MDSS_MDP_HW_REV_111	MDSS_MDP_REV(1, 11, 0) /* 8956/76 v1.0 */
 #define MDSS_MDP_HW_REV_112	MDSS_MDP_REV(1, 12, 0) /* 8952 v1.0 */
 #define MDSS_MDP_HW_REV_114	MDSS_MDP_REV(1, 14, 0) /* 8937 v1.0 */
 #define MDSS_MDP_HW_REV_115	MDSS_MDP_REV(1, 15, 0) /* msmgold */
@@ -509,12 +513,6 @@ struct mdp_pa_mem_col_cfg {
 	uint32_t hue_region;
 	uint32_t sat_region;
 	uint32_t val_region;
-
-	/* New Control Params in PA V1_7 */
-	uint32_t color_adjust_p2;
-	uint32_t blend_gain;
-	uint8_t sat_hold;
-	uint8_t val_hold;
 };
 
 #define MDP_SIX_ZONE_LUT_SIZE		384
@@ -1127,7 +1125,7 @@ enum {
 #define MDSS_PP_SPLIT_RIGHT_ONLY	0x20000000
 #define MDSS_PP_SPLIT_MASK		0x30000000
 
-#define MDSS_MAX_BL_BRIGHTNESS 255
+#define MDSS_MAX_BL_BRIGHTNESS 4095
 #define AD_BL_LIN_LEN 256
 #define AD_BL_ATT_LUT_LEN 33
 

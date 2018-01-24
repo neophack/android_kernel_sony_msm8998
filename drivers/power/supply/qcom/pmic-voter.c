@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/debugfs.h>
 #include <linux/spinlock.h>
@@ -18,10 +23,10 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include "pmic-voter.h"
+#include <linux/pmic-voter.h>
 
-#ifndef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-#define NUM_MAX_CLIENTS	8
+#if !defined(CONFIG_SOMC_CHARGER_EXTENSION)
+#define NUM_MAX_CLIENTS		16
 #endif
 #define DEBUG_FORCE_CLIENT	"DEBUG_FORCE_CLIENT"
 
@@ -187,6 +192,38 @@ void lock_votable(struct votable *votable)
 void unlock_votable(struct votable *votable)
 {
 	mutex_unlock(&votable->vote_lock);
+}
+
+/**
+ * is_client_vote_enabled() -
+ * is_client_vote_enabled_locked() -
+ *		The unlocked and locked variants of getting whether a client's
+		vote is enabled.
+ * @votable:	the votable object
+ * @client_str: client of interest
+ *
+ * Returns:
+ *	True if the client's vote is enabled; false otherwise.
+ */
+bool is_client_vote_enabled_locked(struct votable *votable,
+							const char *client_str)
+{
+	int client_id = get_client_id(votable, client_str);
+
+	if (client_id < 0)
+		return false;
+
+	return votable->votes[client_id].enabled;
+}
+
+bool is_client_vote_enabled(struct votable *votable, const char *client_str)
+{
+	bool enabled;
+
+	lock_votable(votable);
+	enabled = is_client_vote_enabled_locked(votable, client_str);
+	unlock_votable(votable);
+	return enabled;
 }
 
 /**
@@ -408,12 +445,14 @@ out:
 int rerun_election(struct votable *votable)
 {
 	int rc = 0;
+	int effective_result;
 
 	lock_votable(votable);
+	effective_result = get_effective_result_locked(votable);
 	if (votable->callback)
 		rc = votable->callback(votable,
-				votable->data,
-			votable->effective_result,
+			votable->data,
+			effective_result,
 			get_client_str(votable, votable->effective_client_id));
 	unlock_votable(votable);
 	return rc;
@@ -662,8 +701,7 @@ void destroy_votable(struct votable *votable)
 	kfree(votable->name);
 	kfree(votable);
 }
-
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 ssize_t somc_output_voter_param(struct votable *votable,
 						char *buf, size_t size)
 {
@@ -724,4 +762,4 @@ int somc_get_vote_clients(struct votable *votable, char *clients[])
 	}
 	return num_clients;
 }
-#endif /* CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION */
+#endif

@@ -423,7 +423,6 @@ static struct notifier_block nb = {
 	.notifier_call = modem_notifier_cb,
 };
 
-#ifndef CONFIG_ARCH_MSM8916
 static void shared_hyp_mapping(int client_id)
 {
 	int ret;
@@ -449,7 +448,6 @@ static void shared_hyp_mapping(int client_id)
 	}
 	memblock[client_id].hyp_mapping = 1;
 }
-#endif
 
 static int handle_alloc_req(void *req_h, void *req, void *conn_h)
 {
@@ -552,7 +550,6 @@ static int handle_alloc_generic_req(void *req_h, void *req, void *conn_h)
 	memblock[client_id].sequence_id = alloc_req->sequence_id;
 
 	fill_alloc_response(alloc_resp, client_id, &resp);
-#ifndef CONFIG_ARCH_MSM8916
 	/*
 	 * Perform the Hypervisor mapping in order to avoid XPU viloation
 	 * to the allocated region for Modem Clients
@@ -560,7 +557,6 @@ static int handle_alloc_generic_req(void *req_h, void *req, void *conn_h)
 	if (!memblock[client_id].hyp_mapping &&
 		memblock[client_id].alloted)
 		shared_hyp_mapping(client_id);
-#endif
 	mutex_unlock(&memsh_drv->mem_share);
 	pr_debug("memshare: alloc_resp.num_bytes :%d, alloc_resp.handle :%lx, alloc_resp.mem_req_result :%lx\n",
 			  alloc_resp->dhms_mem_alloc_addr_info[0].num_bytes,
@@ -972,8 +968,8 @@ static int memshare_child_probe(struct platform_device *pdev)
   /*
    *	Memshare allocation for guaranteed clients
    */
-	if (memblock[num_clients].guarantee) {
-		if (client_id == 1 && size > 0)
+	if (memblock[num_clients].guarantee && size > 0) {
+		if (client_id == 1)
 			size += MEMSHARE_GUARD_BYTES;
 		rc = memshare_alloc(memsh_child->dev,
 				size,
@@ -984,6 +980,7 @@ static int memshare_child_probe(struct platform_device *pdev)
 			return rc;
 		}
 		memblock[num_clients].alloted = 1;
+		shared_hyp_mapping(num_clients);
 	}
 
 	/*

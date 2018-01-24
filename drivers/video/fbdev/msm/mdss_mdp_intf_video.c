@@ -58,6 +58,8 @@ struct intf_timing_params {
 	u32 v_front_porch;
 	u32 hsync_pulse_width;
 	u32 vsync_pulse_width;
+	u32 h_polarity;
+	u32 v_polarity;
 
 	u32 border_clr;
 	u32 underflow_clr;
@@ -72,6 +74,7 @@ struct mdss_mdp_video_ctx {
 	u8 ref_cnt;
 
 	u8 timegen_en;
+	bool timegen_flush_pending;
 	bool polling_en;
 	u32 poll_cnt;
 	struct completion vsync_comp;
@@ -451,13 +454,32 @@ static int mdss_mdp_video_intf_recovery(void *data, int event)
 	}
 }
 
+static int mdss_mdp_video_wait_one_frame(struct mdss_mdp_ctl *ctl)
+{
+	u32 frame_time, frame_rate;
+	int ret = 0;
+	struct mdss_panel_data *pdata = ctl->panel_data;
+
+	if (pdata == NULL) {
+		frame_rate = DEFAULT_FRAME_RATE;
+	} else {
+		frame_rate = mdss_panel_get_framerate(&pdata->panel_info);
+		if (!(frame_rate >= 24 && frame_rate <= 240))
+			frame_rate = 24;
+	}
+
+	frame_time = ((1000/frame_rate) + 1);
+
+	msleep(frame_time);
+
+	return ret;
+}
+
 static void mdss_mdp_video_avr_vtotal_setup(struct mdss_mdp_ctl *ctl,
 					struct intf_timing_params *p,
 					struct mdss_mdp_video_ctx *ctx)
 {
 	struct mdss_data_type *mdata = ctl->mdata;
-	struct mdss_mdp_ctl *sctl = NULL;
-	struct mdss_mdp_video_ctx *sctx = NULL;
 
 	if (test_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map)) {
 		struct mdss_panel_data *pdata = ctl->panel_data;
@@ -484,14 +506,11 @@ static void mdss_mdp_video_avr_vtotal_setup(struct mdss_mdp_ctl *ctl,
 
 		/*
 		 * Make sure config goes through
+		 * and queue timegen flush
 		 */
 		wmb();
 
-		sctl = mdss_mdp_get_split_ctl(ctl);
-		if (sctl)
-			sctx = (struct mdss_mdp_video_ctx *)
-				sctl->intf_ctx[MASTER_CTX];
-		mdss_mdp_video_timegen_flush(ctl, ctx);
+		ctx->timegen_flush_pending = true;
 
 		MDSS_XLOG(pinfo->min_fps, pinfo->default_fps, avr_vtotal);
 	}
@@ -624,9 +643,9 @@ static int mdss_mdp_video_timegen_setup(struct mdss_mdp_ctl *ctl,
 	display_hctl = (hsync_end_x << 16) | hsync_start_x;
 
 	den_polarity = 0;
-	if (MDSS_INTF_HDMI == ctx->intf_type) {
-		hsync_polarity = p->yres >= 720 ? 0 : 1;
-		vsync_polarity = p->yres >= 720 ? 0 : 1;
+	if (ctx->intf_type == MDSS_INTF_HDMI) {
+		hsync_polarity = p->h_polarity;
+		vsync_polarity = p->v_polarity;
 	} else {
 		hsync_polarity = 0;
 		vsync_polarity = 0;
@@ -687,8 +706,10 @@ static void mdss_mdp_video_timegen_flush(struct mdss_mdp_ctl *ctl,
 			ctl_flush |= (BIT(31) >>
 					(sctx->intf_num - MDSS_MDP_INTF0));
 	}
+	MDSS_XLOG(ctl->intf_num, sctx?sctx->intf_num:0xf00, ctl_flush,
+				mdss_mdp_ctl_read(ctl, MDSS_MDP_REG_CTL_FLUSH));
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_FLUSH, ctl_flush);
-	MDSS_XLOG(ctl->intf_num, sctx?sctx->intf_num:0xf00, ctl_flush);
+
 }
 
 static inline void video_vsync_irq_enable(struct mdss_mdp_ctl *ctl, bool clear)
@@ -1387,7 +1408,7 @@ static int mdss_mdp_video_dfps_wait4vsync(struct mdss_mdp_ctl *ctl)
 			pr_err("error polling for vsync\n");
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
 				"dsi1_ctrl", "dsi1_phy", "vbif", "dbg_bus",
-				"vbif_dbg_bus", "panic");
+				"vbif_dbg_bus", "dsi_dbg_bus", "panic");
 		}
 	} else {
 		rc = 0;
@@ -1685,6 +1706,16 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 
 		mdss_bus_bandwidth_ctrl(true);
 
+		/* configure the split link to both sublinks */
+		if (is_panel_split_link(ctl->mfd)) {
+			mdp_video_write(ctx, MDSS_MDP_REG_SPLIT_LINK, 0x3);
+			/*
+			 * ensure split link register is written before
+			 * enabling timegen
+			 */
+			wmb();
+		}
+
 		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
 		wmb();
 
@@ -1692,21 +1723,6 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 				usecs_to_jiffies(VSYNC_TIMEOUT_US));
 		WARN(rc == 0, "timeout (%d) enabling timegen on ctl=%d\n",
 				rc, ctl->num);
-
-		if (ctl->mfd) {
-			struct mdss_panel_data *pdata;
-			pdata = dev_get_platdata(&ctl->mfd->pdev->dev);
-			if (!pdata) {
-				pr_err("no panel connected\n");
-				spin_unlock(&ctx->vsync_lock);
-				return -ENODEV;
-			}
-
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-			if (pdata->intf_ready)
-				pdata->intf_ready(pdata);
-#endif
-		}
 
 		ctx->timegen_en = true;
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL,
@@ -1985,8 +2001,9 @@ static void mdss_mdp_handoff_programmable_fetch(struct mdss_mdp_ctl *ctl,
 			MDSS_MDP_REG_INTF_HSYNC_CTL) >> 16;
 		v_total_handoff = mdp_video_read(ctx,
 			MDSS_MDP_REG_INTF_VSYNC_PERIOD_F0)/h_total_handoff;
-		pinfo->prg_fet = v_total_handoff -
-			((fetch_start_handoff - 1)/h_total_handoff);
+		if (h_total_handoff)
+			pinfo->prg_fet = v_total_handoff -
+				((fetch_start_handoff - 1)/h_total_handoff);
 		pr_debug("programmable fetch lines %d start:%d\n",
 			pinfo->prg_fet, fetch_start_handoff);
 		MDSS_XLOG(pinfo->prg_fet, fetch_start_handoff,
@@ -2164,7 +2181,8 @@ static int mdss_mdp_video_ctx_setup(struct mdss_mdp_ctl *ctl,
 		itp->width = dsc->pclk_per_line;
 		itp->xres = dsc->pclk_per_line;
 	}
-
+	itp->h_polarity = pinfo->lcdc.h_polarity;
+	itp->v_polarity = pinfo->lcdc.v_polarity;
 	itp->h_back_porch = pinfo->lcdc.h_back_porch;
 	itp->h_front_porch = pinfo->lcdc.h_front_porch;
 	itp->v_back_porch = pinfo->lcdc.v_back_porch;
@@ -2469,24 +2487,40 @@ static int mdss_mdp_video_early_wake_up(struct mdss_mdp_ctl *ctl)
 static int mdss_mdp_video_avr_ctrl(struct mdss_mdp_ctl *ctl, bool enable)
 {
 	struct mdss_mdp_video_ctx *ctx = NULL, *sctx = NULL;
+	struct mdss_mdp_ctl *sctl;
 
 	ctx = (struct mdss_mdp_video_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx || !ctx->ref_cnt) {
 		pr_err("invalid master ctx\n");
 		return -EINVAL;
 	}
-	mdss_mdp_video_avr_ctrl_setup(ctx, ctl, ctl->is_master,
-			enable);
 
-	if (is_pingpong_split(ctl->mfd)) {
+	sctl = mdss_mdp_get_split_ctl(ctl);
+	if (sctl) {
+		sctx = (struct mdss_mdp_video_ctx *) sctl->intf_ctx[MASTER_CTX];
+	} else if (is_pingpong_split(ctl->mfd)) {
 		sctx = (struct mdss_mdp_video_ctx *) ctl->intf_ctx[SLAVE_CTX];
 		if (!sctx || !sctx->ref_cnt) {
 			pr_err("invalid slave ctx\n");
 			return -EINVAL;
 		}
-		mdss_mdp_video_avr_ctrl_setup(sctx, ctl, false,
-				enable);
 	}
+
+	if (ctx->timegen_flush_pending) {
+		mdss_mdp_video_timegen_flush(ctl, sctx);
+
+		/* wait a frame for flush to be completed */
+		mdss_mdp_video_wait_one_frame(ctl);
+
+		ctx->timegen_flush_pending = false;
+		if (sctx)
+			sctx->timegen_flush_pending = false;
+	}
+
+	mdss_mdp_video_avr_ctrl_setup(ctx, ctl, ctl->is_master, enable);
+
+	if (sctx)
+		mdss_mdp_video_avr_ctrl_setup(sctx, ctl, false, enable);
 
 	return 0;
 }

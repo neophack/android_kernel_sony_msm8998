@@ -48,6 +48,11 @@ struct mdss_smmu_private {
 
 void mdss_smmu_register(struct device *dev);
 int mdss_smmu_init(struct mdss_data_type *mdata, struct device *dev);
+int mdss_smmu_set_attribute(int domain, int flag, int val);
+
+enum smmu_attributes {
+	EARLY_MAP
+};
 
 static inline int mdss_smmu_dma_data_direction(int dir)
 {
@@ -155,13 +160,8 @@ static inline int mdss_smmu_get_domain_type(u64 flags, bool rotator)
 static inline int mdss_smmu_attach(struct mdss_data_type *mdata)
 {
 	int rc;
-	bool skip_lock = false;
 
-	if (unlikely(!mdata->mdss_util->iommu_lock))
-		skip_lock = true;
-
-	if (likely(!skip_lock))
-		mdata->mdss_util->iommu_lock();
+	mdata->mdss_util->iommu_lock();
 	MDSS_XLOG(mdata->iommu_attached);
 
 	if (mdata->iommu_attached) {
@@ -171,7 +171,6 @@ static inline int mdss_smmu_attach(struct mdss_data_type *mdata)
 	}
 
 	if (!mdata->smmu_ops.smmu_attach) {
-		pr_err("No smmu_attach function!!!!\n");
 		rc = -ENODEV;
 		goto end;
 	}
@@ -181,8 +180,7 @@ static inline int mdss_smmu_attach(struct mdss_data_type *mdata)
 		mdata->iommu_attached = true;
 
 end:
-	if (likely(!skip_lock))
-		mdata->mdss_util->iommu_unlock();
+	mdata->mdss_util->iommu_unlock();
 	return rc;
 }
 
@@ -260,7 +258,7 @@ static inline void mdss_smmu_unmap_dma_buf(struct sg_table *table, int domain,
 }
 
 static inline int mdss_smmu_dma_alloc_coherent(struct device *dev, size_t size,
-		dma_addr_t *phys, dma_addr_t *iova, void *cpu_addr,
+		dma_addr_t *phys, dma_addr_t *iova, void **cpu_addr,
 		gfp_t gfp, int domain)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();

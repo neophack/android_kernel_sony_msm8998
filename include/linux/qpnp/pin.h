@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 /* Mode select */
 #define QPNP_PIN_MODE_DIG_IN			0
@@ -225,6 +230,4 @@ int qpnp_pin_config(int gpio, struct qpnp_pin_cfg *param);
  */
 int qpnp_pin_map(const char *name, uint32_t pmic_pin);
 
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 int qpnp_get_pin_config(int gpio, struct qpnp_pin_cfg *param);
-#endif

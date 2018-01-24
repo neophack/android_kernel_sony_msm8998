@@ -9,10 +9,15 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include "f_gsi.h"
 #include "rndis.h"
-#include "../debug.h"
+#include "debug.h"
 
 static unsigned int gsi_in_aggr_size;
 module_param(gsi_in_aggr_size, uint, S_IRUGO | S_IWUSR);
@@ -1035,7 +1040,7 @@ gsi_ctrl_dev_read(struct file *fp, char __user *buf, size_t count, loff_t *pos)
 	log_event_dbg("%s: cpkt size:%d", __func__, cpkt->len);
 	if (qti_packet_debug)
 		print_hex_dump(KERN_DEBUG, "READ:", DUMP_PREFIX_OFFSET, 16, 1,
-			buf, min_t(int, 30, cpkt->len), false);
+			cpkt->buf, min_t(int, 30, cpkt->len), false);
 
 	ret = copy_to_user(buf, cpkt->buf, cpkt->len);
 	if (ret) {
@@ -1108,7 +1113,7 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	c_port->copied_from_modem++;
 	if (qti_packet_debug)
 		print_hex_dump(KERN_DEBUG, "WRITE:", DUMP_PREFIX_OFFSET, 16, 1,
-			buf, min_t(int, 30, count), false);
+			cpkt->buf, min_t(int, 30, count), false);
 
 	spin_lock_irqsave(&c_port->lock, flags);
 	list_add_tail(&cpkt->list, &c_port->cpkt_resp_q);
@@ -1578,6 +1583,12 @@ static void gsi_rndis_command_complete(struct usb_ep *ep,
 {
 	struct f_gsi *rndis = req->context;
 	int status;
+
+	if (req->status != 0) {
+		log_event_err("RNDIS command completion error %d\n",
+				req->status);
+		return;
+	}
 
 	status = rndis_msg_parser(rndis->params, (u8 *) req->buf);
 	if (status < 0)
@@ -2436,6 +2447,30 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 	switch (gsi->prot_id) {
 	case IPA_USB_RNDIS:
+		/* "Wireless" RNDIS6; auto-detected by Windows */
+		pr_debug("%s: linux_support=%d\n",  __func__,
+							gsi->linux_support);
+		if (gsi->linux_support) {
+			pr_info("%s: RNDIS5\n",  __func__);
+			rndis_gsi_control_intf.bInterfaceClass =
+						USB_CLASS_WIRELESS_CONTROLLER;
+			rndis_gsi_control_intf.bInterfaceSubClass = 0x01;
+			rndis_gsi_control_intf.bInterfaceProtocol = 0x03;
+			rndis_gsi_iad_descriptor.bFunctionClass =
+						USB_CLASS_WIRELESS_CONTROLLER;
+			rndis_gsi_iad_descriptor.bFunctionSubClass = 0x01;
+			rndis_gsi_iad_descriptor.bFunctionProtocol = 0x03;
+		} else {
+			pr_info("%s: RNDIS6\n",  __func__);
+			rndis_gsi_control_intf.bInterfaceClass = USB_CLASS_MISC;
+			rndis_gsi_control_intf.bInterfaceSubClass = 0x04;
+			rndis_gsi_control_intf.bInterfaceProtocol = 0x01;
+			rndis_gsi_iad_descriptor.bFunctionClass =
+								USB_CLASS_MISC;
+			rndis_gsi_iad_descriptor.bFunctionSubClass = 0x04;
+			rndis_gsi_iad_descriptor.bFunctionProtocol = 0x01;
+		}
+
 		info.string_defs = rndis_gsi_string_defs;
 		info.ctrl_desc = &rndis_gsi_control_intf;
 		info.ctrl_str_idx = 0;
@@ -2501,16 +2536,6 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 					DEFAULT_PKT_ALIGNMENT_FACTOR);
 		rndis_set_pkt_alignment_factor(gsi->params,
 					DEFAULT_PKT_ALIGNMENT_FACTOR);
-		if(gsi->rndis_use_wceis) {
-			info.iad_desc->bFunctionClass =
-					USB_CLASS_WIRELESS_CONTROLLER;
-			info.iad_desc->bFunctionSubClass = 0x01;
-			info.iad_desc->bFunctionProtocol = 0x03;
-			info.ctrl_desc->bInterfaceClass =
-					USB_CLASS_WIRELESS_CONTROLLER;
-			info.ctrl_desc->bInterfaceSubClass = 0x1;
-			info.ctrl_desc->bInterfaceProtocol = 0x03;
-		}
 		break;
 	case IPA_USB_MBIM:
 		info.string_defs = mbim_gsi_string_defs;
@@ -2823,6 +2848,8 @@ static struct f_gsi *gsi_function_init(enum ipa_usb_teth_prot prot_id)
 
 	gsi->d_port.ipa_usb_wq = ipa_usb_wq;
 
+	gsi->linux_support = false;
+
 	ret = gsi_function_ctrl_port_init(gsi);
 	if (ret) {
 		kfree(gsi);
@@ -2988,40 +3015,56 @@ static ssize_t gsi_info_show(struct config_item *item, char *page)
 	return ret;
 }
 
-CONFIGFS_ATTR_RO(gsi_, info);
-
-static ssize_t gsi_rndis_wceis_show(struct config_item *item, char *page)
-{
-	int ret;
-	struct f_gsi *gsi = to_gsi_opts(item)->gsi;
-
-	ret = sprintf(page, "%d\n",gsi->rndis_use_wceis);
-	return 0;
-}
-
-static ssize_t gsi_rndis_wceis_store(struct config_item *item,
-			const char *page, size_t len)
+static ssize_t gsi_linux_support_show(struct config_item *item, char *page)
 {
 	struct f_gsi *gsi = to_gsi_opts(item)->gsi;
-	u8 val = 0;
 	int ret;
 
-	ret = kstrtou8(page, 0, &val);
-	if( ret !=0 || val > 1) {
-		pr_err("Wrong value written to wceis attr(%u)\n", val);
-		return len;
+	switch (gsi->prot_id) {
+	case IPA_USB_RNDIS:
+		/* "Y\n\0" 3characters */
+		ret = snprintf(page, 3, "%c\n", gsi->linux_support ? 'Y' : 'N');
+		break;
+	default:
+		ret = EBADR;
+		break;
 	}
 
-	gsi->rndis_use_wceis = val;
+	return ret;
+}
 
+static ssize_t gsi_linux_support_store(struct config_item *item,
+						 const char *page, size_t len)
+{
+	struct f_gsi *gsi = to_gsi_opts(item)->gsi;
+	bool val;
+	int ret = 0;
+
+	switch (gsi->prot_id) {
+	case IPA_USB_RNDIS:
+		ret = strtobool(page, &val);
+		if (ret)
+			break;
+		gsi->linux_support = val;
+		pr_info("%s: set linux_support=%d.\n",  __func__,
+							gsi->linux_support);
+		break;
+	default:
+		ret = -EBADR;
+		break;
+	}
+
+	if (ret)
+		len = ret;
 	return len;
 }
 
-CONFIGFS_ATTR(gsi_, rndis_wceis);
+CONFIGFS_ATTR(gsi_, linux_support);
+CONFIGFS_ATTR_RO(gsi_, info);
 
 static struct configfs_attribute *gsi_attrs[] = {
 	&gsi_attr_info,
-	&gsi_attr_rndis_wceis,
+	&gsi_attr_linux_support,
 	NULL,
 };
 

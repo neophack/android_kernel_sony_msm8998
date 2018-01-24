@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef __SUBSYS_RESTART_H
 #define __SUBSYS_RESTART_H
@@ -17,7 +22,10 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 
+#define SUBSYS_CRASH_REASON_LEN 512
+
 struct subsys_device;
+extern struct bus_type subsys_bus_type;
 
 enum {
 	RESET_SOC = 0,
@@ -55,6 +63,8 @@ struct module;
  * @sysmon_shutdown_ret: Return value for the call to sysmon_send_shutdown
  * @system_debug: If "set", triggers a device restart when the
  * subsystem's wdog bite handler is invoked.
+ * @ignore_ssr_failure: SSR failures are usually fatal and results in panic. If
+ * set will ignore failure.
  * @edge: GLINK logical name of the subsystem
  */
 struct subsys_desc {
@@ -90,6 +100,7 @@ struct subsys_desc {
 	u32 sysmon_pid;
 	int sysmon_shutdown_ret;
 	bool system_debug;
+	bool ignore_ssr_failure;
 	const char *edge;
 };
 
@@ -129,11 +140,28 @@ extern void subsys_default_online(struct subsys_device *dev);
 extern void subsys_set_crash_status(struct subsys_device *dev,
 					enum crash_status crashed);
 extern enum crash_status subsys_get_crash_status(struct subsys_device *dev);
+extern void subsys_set_error(struct subsys_device *dev, const char *error_msg);
+
+extern int subsystem_crash_reason(const char *name, char *reason);
+#if defined(CONFIG_DEBUG_FS)
+extern void update_crash_reason(struct subsys_device *dev, char *, int);
+#else
+static inline void update_crash_reason(struct subsys_device *dev,
+						char *reason, int size) { }
+#endif
 void notify_proxy_vote(struct device *device);
 void notify_proxy_unvote(struct device *device);
 void complete_err_ready(struct subsys_device *subsys);
 extern int wait_for_shutdown_ack(struct subsys_desc *desc);
 #else
+
+static inline void update_crash_reason(struct subsys_device *dev,
+						char *reason, int size) { }
+
+static inline int subsystem_crash_reason(const char *name, char *reason)
+{
+	return 0;
+}
 
 static inline int subsys_get_restart_level(struct subsys_device *dev)
 {

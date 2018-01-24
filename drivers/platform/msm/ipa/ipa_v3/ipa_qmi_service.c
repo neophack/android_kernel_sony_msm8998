@@ -27,7 +27,7 @@
 
 #define IPA_Q6_SVC_VERS 1
 #define IPA_A5_SVC_VERS 1
-#define Q6_QMI_COMPLETION_TIMEOUT 60000
+#define Q6_QMI_COMPLETION_TIMEOUT (60*HZ)
 
 #define IPA_A5_SERVICE_SVC_ID 0x31
 #define IPA_A5_SERVICE_INS_ID 1
@@ -807,6 +807,11 @@ int ipa3_qmi_filter_notify_send(
 		return -EINVAL;
 	}
 
+	if (req->source_pipe_index == -1) {
+		IPAWANERR("Source pipe index invalid\n");
+		return -EINVAL;
+	}
+
 	mutex_lock(&ipa3_qmi_lock);
 	if (ipa3_qmi_ctx != NULL) {
 		/* cache the qmi_filter_request */
@@ -1177,10 +1182,13 @@ void ipa3_qmi_service_exit(void)
 	}
 
 	/* clean the QMI msg cache */
+	mutex_lock(&ipa3_qmi_lock);
 	if (ipa3_qmi_ctx != NULL) {
 		vfree(ipa3_qmi_ctx);
 		ipa3_qmi_ctx = NULL;
 	}
+	mutex_unlock(&ipa3_qmi_lock);
+
 	ipa3_svc_handle = 0;
 	ipa3_qmi_modem_init_fin = false;
 	ipa3_qmi_indication_fin = false;

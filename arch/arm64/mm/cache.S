@@ -3,7 +3,6 @@
  *
  * Copyright (C) 2001 Deep Blue Solutions Ltd.
  * Copyright (C) 2012 ARM Ltd.
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -24,42 +23,7 @@
 #include <asm/assembler.h>
 #include <asm/cpufeature.h>
 #include <asm/alternative.h>
-
-#include "proc-macros.S"
-
- /*
- *     flush_dcache_louis()
- *
- *     Flush the D-cache up to the Level of Unification Inner Shareable
- *
- *     Corrupted registers: x0-x7, x9-x11
- */
-
-ENTRY(flush_dcache_louis)
-	dsb	sy		// ensure ordering with previous memory accesses
-	mrs	x0, clidr_el1	// read clidr
-	and	x3, x0, #(7 << 21)	// extract LoUIS from clidr
-	lsr	x3, x3, #20	// x3 = LoUIS * 2
-	cbz	x3, done	// if LoUIS is 0, then no need to clean
-	mov	x10, #0		// start clean at cache level 0
-	b	loop1		// start flushing cache levels
-done:
-	ret
-ENDPROC(flush_dcache_louis)
-
- /*
- *     flush_kern_cache_louis(void)
- *
- *     Flush the data cache up to Level of Unification Inner Shareable.
- *     Invalidate the I-cache to the point of unification.
- */
-ENTRY(flush_cache_louis)
-	mov	x12, lr
-	bl	flush_dcache_louis
-	mov	x0, #0
-	ic	ialluis				// I+BTB cache invalidate
-	ret x12
-ENDPROC(flush_cache_louis)
+#include <asm/uaccess.h>
 
 /*
  *	__flush_dcache_all()
@@ -158,11 +122,12 @@ ENTRY(flush_icache_range)
  *	- end     - virtual end address of region
  */
 ENTRY(__flush_cache_user_range)
+	uaccess_ttbr0_enable x2, x3
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x4, x0, x3
 1:
-USER(9f, dc	cvau, x4	)		// clean D line to PoU
+user_alt 9f, "dc cvau, x4",  "dc civac, x4",  ARM64_WORKAROUND_CLEAN_CACHE
 	add	x4, x4, x2
 	cmp	x4, x1
 	b.lo	1b
@@ -179,10 +144,12 @@ USER(9f, ic	ivau, x4	)		// invalidate I line PoU
 	dsb	ish
 	isb
 	mov	x0, #0
+1:
+	uaccess_ttbr0_disable x1
 	ret
 9:
 	mov	x0, #-EFAULT
-	ret
+	b	1b
 ENDPROC(flush_icache_range)
 ENDPROC(__flush_cache_user_range)
 

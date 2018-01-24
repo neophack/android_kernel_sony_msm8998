@@ -18,8 +18,17 @@
  */
 
 #include "msm8998-yoshino-common.dtsi"
-#include "msm8998-yoshino-maple-camera.dtsi"
-#include "dsi-panel-somc-maple.dtsi"
+#include "dsi-panel-maple.dtsi"
+
+&firmware {
+	android {
+		fstab {
+			vendor {
+				status = "disabled";
+			};
+		};
+	};
+};
 
 &soc {
 
@@ -215,7 +224,7 @@
 	};
 };
 
-/{
+&vendor {
 	yoshino_maple_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <17>;
 		#include "fg-gen3-batterydata-maple-send-4350mv-3230mah.dtsi"
@@ -267,6 +276,11 @@
 	somc,jeita-aux-thresh-warm = <700>;
 	somc,jeita-warm-fcc-ua = <800000>;
 	somc,jeita-cool-fcc-ua = <800000>;
+};
+
+&pmi8998_pdphy {
+	qcom,default-sink-caps = <5000 1500>, /* 5V @ 1.5A */
+				 <9000 1700>; /* 9V @ 1.7A */
 };
 
 &mdss_dsi {
@@ -323,4 +337,17 @@
 				936 1053 1170 1404 1638 1872 2106
 				2340 2574 2808 3042 3276 3510 3744
 				3978 4095>;
+};
+
+&spmi_bus {
+	qcom,pmi8998@3 {
+		labibb: qpnp-labibb-regulator {
+			ibb_regulator: qcom,ibb@dc00 {
+				qcom,qpnp-ibb-slew-rate = <12000>;
+			};
+			lab_regulator: qcom,lab@de00 {
+				qcom,qpnp-lab-slew-rate = <5000>;
+			};
+		};
+	};
 };

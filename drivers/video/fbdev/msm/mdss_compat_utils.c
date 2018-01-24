@@ -129,6 +129,7 @@ static void  __copy_atomic_commit_struct(struct mdp_layer_commit  *commit,
 	commit->commit_v1.left_roi = commit32->commit_v1.left_roi;
 	commit->commit_v1.right_roi = commit32->commit_v1.right_roi;
 	commit->commit_v1.bl_level = commit32->commit_v1.bl_level;
+
 	memcpy(&commit->commit_v1.reserved, &commit32->commit_v1.reserved,
 		count);
 }
@@ -223,12 +224,14 @@ static struct mdp_input_layer *__create_layer_list(
 
 		layer->flags = layer32->flags;
 		layer->pipe_ndx = layer32->pipe_ndx;
+		layer->rect_num = layer32->rect_num;
 		layer->horz_deci = layer32->horz_deci;
 		layer->vert_deci = layer32->vert_deci;
 		layer->z_order = layer32->z_order;
 		layer->transp_mask = layer32->transp_mask;
 		layer->bg_color = layer32->bg_color;
 		layer->blend_op = layer32->blend_op;
+		layer->alpha = layer32->alpha;
 		layer->color_space = layer32->color_space;
 		layer->src_rect = layer32->src_rect;
 		layer->dst_rect = layer32->dst_rect;
@@ -3491,6 +3494,7 @@ static int __copy_layer_pp_info_igc_params(
 			compat_ptr(pp_info32->igc_cfg.c0_c1_data);
 		pp_info->igc_cfg.c2_data =
 			compat_ptr(pp_info32->igc_cfg.c2_data);
+		kfree(cfg_payload);
 		cfg_payload = NULL;
 		break;
 	}
@@ -3563,6 +3567,7 @@ static int __copy_layer_pp_info_hist_lut_params(
 		pp_info->hist_lut_cfg.len = pp_info32->hist_lut_cfg.len;
 		pp_info->hist_lut_cfg.data =
 				compat_ptr(pp_info32->hist_lut_cfg.data);
+		kfree(cfg_payload);
 		cfg_payload = NULL;
 		break;
 	}
@@ -3652,6 +3657,7 @@ static int __copy_layer_pp_info_pa_v2_params(
 		break;
 	default:
 		pr_debug("version invalid\n");
+		kfree(cfg_payload);
 		cfg_payload = NULL;
 		break;
 	}
@@ -3735,6 +3741,7 @@ static int __copy_layer_pp_info_pcc_params(
 		break;
 	default:
 		pr_debug("version invalid, fallback to legacy\n");
+		kfree(cfg_payload);
 		cfg_payload = NULL;
 		break;
 	}

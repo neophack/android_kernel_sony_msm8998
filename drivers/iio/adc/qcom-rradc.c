@@ -10,6 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #define pr_fmt(fmt) "RRADC: %s: " fmt, __func__
 
@@ -164,11 +169,6 @@
 #define FG_ADC_RR_DIE_TEMP_SLOPE		2
 #define FG_ADC_RR_DIE_TEMP_OFFSET_MILLI_DEGC	25000
 
-#define FAB_ID_GF				0x30
-#define FAB_ID_SMIC				0x11
-#define FAB_ID_660_GF				0x0
-#define FAB_ID_660_TSMC				0x2
-#define FAB_ID_660_MX				0x3
 #define FG_ADC_RR_CHG_TEMP_GF_OFFSET_UV		1303168
 #define FG_ADC_RR_CHG_TEMP_GF_SLOPE_UV_PER_C	3784
 #define FG_ADC_RR_CHG_TEMP_SMIC_OFFSET_UV	1338433
@@ -185,6 +185,9 @@
 #define FG_ADC_RR_VOLT_INPUT_FACTOR		8
 #define FG_ADC_RR_CURR_INPUT_FACTOR		2000
 #define FG_ADC_RR_CURR_USBIN_INPUT_FACTOR_MIL	1886
+#define FG_ADC_RR_CURR_USBIN_660_FACTOR_MIL	9
+#define FG_ADC_RR_CURR_USBIN_660_UV_VAL	579500
+
 #define FG_ADC_SCALE_MILLI_FACTOR		1000
 #define FG_ADC_KELVINMIL_CELSIUSMIL		273150
 
@@ -197,6 +200,9 @@
 #define FG_RR_CONV_CONTINUOUS_TIME_MIN_US	50000
 #define FG_RR_CONV_CONTINUOUS_TIME_MAX_US	51000
 #define FG_RR_CONV_MAX_RETRY_CNT		50
+#define FG_RR_TP_REV_VERSION1		21
+#define FG_RR_TP_REV_VERSION2		29
+#define FG_RR_TP_REV_VERSION3		32
 
 /*
  * The channel number is not a physical index in hardware,
@@ -223,7 +229,6 @@ enum rradc_channel_id {
 	RR_ADC_MAX
 };
 
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
 enum rradc_reg_data_idx {
 	RR_ADC_REG_DATA_ADDR = 0,
 	RR_ADC_REG_DATA_MASK,
@@ -236,13 +241,10 @@ struct rradc_reg_cfg {
 	uint32_t	mask;
 	uint32_t	val;
 };
-#endif
 
 struct rradc_chip {
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
 	const struct rradc_reg_cfg	*reg_cfg;
 	int				reg_cfg_num;
-#endif
 	struct device			*dev;
 	struct mutex			lock;
 	struct regmap			*regmap;
@@ -252,6 +254,7 @@ struct rradc_chip {
 	struct rradc_chan_prop		*chan_props;
 	struct device_node		*revid_dev_node;
 	struct pmic_revid_data		*pmic_fab_id;
+	int volt;
 };
 
 struct rradc_channels {
@@ -377,7 +380,7 @@ static int rradc_post_process_volt(struct rradc_chip *chip,
 	return 0;
 }
 
-static int rradc_post_process_curr(struct rradc_chip *chip,
+static int rradc_post_process_usbin_curr(struct rradc_chip *chip,
 			struct rradc_chan_prop *prop, u16 adc_code,
 			int *result_ua)
 {
@@ -385,14 +388,54 @@ static int rradc_post_process_curr(struct rradc_chip *chip,
 
 	if (!prop)
 		return -EINVAL;
-
-	if (prop->channel == RR_ADC_USBIN_I)
-		scale = FG_ADC_RR_CURR_USBIN_INPUT_FACTOR_MIL;
-	else
-		scale = FG_ADC_RR_CURR_INPUT_FACTOR;
+	if (chip->revid_dev_node) {
+		switch (chip->pmic_fab_id->pmic_subtype) {
+		case PM660_SUBTYPE:
+			if (((chip->pmic_fab_id->tp_rev
+				>= FG_RR_TP_REV_VERSION1)
+			&& (chip->pmic_fab_id->tp_rev
+				<= FG_RR_TP_REV_VERSION2))
+			|| (chip->pmic_fab_id->tp_rev
+				>= FG_RR_TP_REV_VERSION3)) {
+				chip->volt = div64_s64(chip->volt, 1000);
+				chip->volt = chip->volt *
+					FG_ADC_RR_CURR_USBIN_660_FACTOR_MIL;
+				chip->volt = FG_ADC_RR_CURR_USBIN_660_UV_VAL -
+					(chip->volt);
+				chip->volt = div64_s64(1000000000, chip->volt);
+				scale = chip->volt;
+			} else
+				scale = FG_ADC_RR_CURR_USBIN_INPUT_FACTOR_MIL;
+			break;
+		case PMI8998_SUBTYPE:
+			scale = FG_ADC_RR_CURR_USBIN_INPUT_FACTOR_MIL;
+			break;
+		default:
+			pr_err("No PMIC subtype found\n");
+			return -EINVAL;
+		}
+	}
 
 	/* scale * V/A; 2.5V ADC full scale */
 	ua = ((int64_t)adc_code * scale);
+	ua *= (FG_ADC_RR_FS_VOLTAGE_MV * FG_ADC_SCALE_MILLI_FACTOR);
+	ua = div64_s64(ua, (FG_MAX_ADC_READINGS * 1000));
+	*result_ua = ua;
+
+	return 0;
+}
+
+static int rradc_post_process_dcin_curr(struct rradc_chip *chip,
+			struct rradc_chan_prop *prop, u16 adc_code,
+			int *result_ua)
+{
+	int64_t ua = 0;
+
+	if (!prop)
+		return -EINVAL;
+
+	/* 0.5 V/A; 2.5V ADC full scale */
+	ua = ((int64_t)adc_code * FG_ADC_RR_CURR_INPUT_FACTOR);
 	ua *= (FG_ADC_RR_FS_VOLTAGE_MV * FG_ADC_SCALE_MILLI_FACTOR);
 	ua = div64_s64(ua, (FG_MAX_ADC_READINGS * 1000));
 	*result_ua = ua;
@@ -421,11 +464,11 @@ static int rradc_get_660_fab_coeff(struct rradc_chip *chip,
 		int64_t *offset, int64_t *slope)
 {
 	switch (chip->pmic_fab_id->fab_id) {
-	case FAB_ID_660_GF:
+	case PM660_FAB_ID_GF:
 		*offset = FG_ADC_RR_CHG_TEMP_660_GF_OFFSET_UV;
 		*slope = FG_RR_CHG_TEMP_660_GF_SLOPE_UV_PER_C;
 		break;
-	case FAB_ID_660_TSMC:
+	case PM660_FAB_ID_TSMC:
 		*offset = FG_ADC_RR_CHG_TEMP_660_SMIC_OFFSET_UV;
 		*slope = FG_RR_CHG_TEMP_660_SMIC_SLOPE_UV_PER_C;
 		break;
@@ -441,11 +484,11 @@ static int rradc_get_8998_fab_coeff(struct rradc_chip *chip,
 		int64_t *offset, int64_t *slope)
 {
 	switch (chip->pmic_fab_id->fab_id) {
-	case FAB_ID_GF:
+	case PMI8998_FAB_ID_GF:
 		*offset = FG_ADC_RR_CHG_TEMP_GF_OFFSET_UV;
 		*slope = FG_ADC_RR_CHG_TEMP_GF_SLOPE_UV_PER_C;
 		break;
-	case FAB_ID_SMIC:
+	case PMI8998_FAB_ID_SMIC:
 		*offset = FG_ADC_RR_CHG_TEMP_SMIC_OFFSET_UV;
 		*slope = FG_ADC_RR_CHG_TEMP_SMIC_SLOPE_UV_PER_C;
 		break;
@@ -615,13 +658,13 @@ static const struct rradc_channels rradc_chans[] = {
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_SKIN_TEMP_LSB, FG_ADC_RR_SKIN_TEMP_MSB,
 			FG_ADC_RR_AUX_THERM_STS)
-	RR_ADC_CHAN_CURRENT("usbin_i", &rradc_post_process_curr,
+	RR_ADC_CHAN_CURRENT("usbin_i", &rradc_post_process_usbin_curr,
 			FG_ADC_RR_USB_IN_I_LSB, FG_ADC_RR_USB_IN_I_MSB,
 			FG_ADC_RR_USB_IN_I_STS)
 	RR_ADC_CHAN_VOLT("usbin_v", &rradc_post_process_volt,
 			FG_ADC_RR_USB_IN_V_LSB, FG_ADC_RR_USB_IN_V_MSB,
 			FG_ADC_RR_USB_IN_V_STS)
-	RR_ADC_CHAN_CURRENT("dcin_i", &rradc_post_process_curr,
+	RR_ADC_CHAN_CURRENT("dcin_i", &rradc_post_process_dcin_curr,
 			FG_ADC_RR_DC_IN_I_LSB, FG_ADC_RR_DC_IN_I_MSB,
 			FG_ADC_RR_DC_IN_I_STS)
 	RR_ADC_CHAN_VOLT("dcin_v", &rradc_post_process_volt,
@@ -979,6 +1022,21 @@ static int rradc_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_PROCESSED:
+		if (((chip->pmic_fab_id->tp_rev
+				>= FG_RR_TP_REV_VERSION1)
+		&& (chip->pmic_fab_id->tp_rev
+				<= FG_RR_TP_REV_VERSION2))
+		|| (chip->pmic_fab_id->tp_rev
+				>= FG_RR_TP_REV_VERSION3)) {
+			if (chan->address == RR_ADC_USBIN_I) {
+				prop = &chip->chan_props[RR_ADC_USBIN_V];
+				rc = rradc_do_conversion(chip, prop, &adc_code);
+				if (rc)
+					break;
+				prop->scale(chip, prop, adc_code, &chip->volt);
+			}
+		}
+
 		prop = &chip->chan_props[chan->address];
 		rc = rradc_do_conversion(chip, prop, &adc_code);
 		if (rc)
@@ -1011,10 +1069,8 @@ static const struct iio_info rradc_info = {
 
 static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 {
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
 	const uint32_t *prop_buf;
 	int reg_cfg_size = 0;
-#endif
 	const struct rradc_channels *rradc_chan;
 	struct iio_chan_spec *iio_chan;
 	unsigned int i = 0, base;
@@ -1058,7 +1114,6 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 		}
 	}
 
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
 	prop_buf = of_get_property(node, "somc,reg-cfg", &reg_cfg_size);
 	if (prop_buf) {
 		if ((reg_cfg_size / sizeof(uint32_t))
@@ -1071,7 +1126,6 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 		chip->reg_cfg_num = reg_cfg_size / sizeof(uint32_t)
 						/ RR_ADC_REG_DATA_IDX_MAX;
 	}
-#endif
 
 	iio_chan = chip->iio_chans;
 
@@ -1098,14 +1152,12 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 
 static int rradc_probe(struct platform_device *pdev)
 {
+	int i;
 	struct device_node *node = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
 	struct iio_dev *indio_dev;
 	struct rradc_chip *chip;
 	int rc = 0;
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
-	int i;
-#endif
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*chip));
 	if (!indio_dev)
@@ -1125,7 +1177,6 @@ static int rradc_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
-#ifdef CONFIG_SOMC_RRADC_EXTENSION
 	for (i = 0; i < chip->reg_cfg_num; i++) {
 		rc = rradc_masked_write(chip,
 				(u16)be32_to_cpu(chip->reg_cfg[i].addr),
@@ -1142,7 +1193,6 @@ static int rradc_probe(struct platform_device *pdev)
 			 (u8)be32_to_cpu(chip->reg_cfg[i].mask),
 			 (u8)be32_to_cpu(chip->reg_cfg[i].val));
 	}
-#endif
 
 	indio_dev->dev.parent = dev;
 	indio_dev->dev.of_node = node;

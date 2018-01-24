@@ -2,7 +2,6 @@
  * driver.h -- SoC Regulator driver support.
  *
  * Copyright (C) 2007, 2008 Wolfson Microelectronics PLC.
- * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Author: Liam Girdwood <lrg@slimlogic.co.uk>
  *
@@ -11,6 +10,11 @@
  * published by the Free Software Foundation.
  *
  * Regulator Driver Interface.
+ */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
  */
 
 #ifndef __LINUX_REGULATOR_DRIVER_H_

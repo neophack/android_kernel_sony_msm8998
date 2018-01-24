@@ -564,6 +564,7 @@ struct sdhci_host {
 	bool runtime_suspended;	/* Host is runtime suspended */
 	bool bus_on;		/* Bus power prevents runtime suspend */
 	bool preset_enabled;	/* Preset is enabled */
+	bool cdr_support;
 
 	struct mmc_request *mrq;	/* Current request */
 	struct mmc_command *cmd;	/* Current command */
@@ -615,8 +616,6 @@ struct sdhci_host {
 	ktime_t data_start_time;
 
 	enum sdhci_power_policy power_policy;
-
-	spinlock_t next_lock;	/* Mutex for next_data */
 
 	bool is_crypto_en;
 	bool crypto_reset_reqd;

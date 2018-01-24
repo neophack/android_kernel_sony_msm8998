@@ -30,6 +30,24 @@ config SND_SOC_QDSP_DEBUG
 	 is inducing kernel panic upon encountering critical
 	 errors from DSP audio modules
 
+config AHC
+	bool "Enable Automatic Headset Compensation"
+	depends on SND_SOC_MSM_QDSP6V2_INTF
+	help
+	 To add support for Automatic Headset Compensation post processing.
+	 This support is to configure the post processing parameters
+	 to DSP. The configuration includes enabling and setting up
+	 the IIR tuning filter and MBDRC in the DSP.
+
+config FORCE_24BIT_COPP
+	bool "Configure COPP in ADSP as 24-bit"
+	depends on SND_SOC_MSM_QDSP6V2_INTF
+	default n
+	help
+	 To configure COPP in ADSP as 24bit for media playback.
+	 This can avoid quantization error for 16-bit media playback
+	 when IIR/MBDRC filters are enabled.
+
 config DOLBY_DS2
 	bool "Enable Dolby DS2"
 	depends on SND_SOC_MSM_QDSP6V2_INTF
@@ -104,7 +122,7 @@ config SND_SOC_INT_CODEC
 	select SND_SOC_MSM_STUB
 	select SND_SOC_MSM_HOSTLESS_PCM
 	select SND_DYNAMIC_MINORS
-#	select MSM_QDSP6_APRV2_GLINK
+	select MSM_QDSP6_APRV2_GLINK
 	select MSM_QDSP6_SSR
 	select MSM_QDSP6_PDR
 	select MSM_QDSP6_NOTIFIER
@@ -117,7 +135,7 @@ config SND_SOC_INT_CODEC
 	select DTS_SRS_TM
 	select DOLBY_LICENSE
 	select SND_HWDEP
-#	select MSM_ULTRASOUND
+	select MSM_ULTRASOUND
 	select DTS_EAGLE
 	select SND_SOC_SDM660_COMMON
 	select SND_SOC_COMPRESS
@@ -136,7 +154,7 @@ config SND_SOC_EXT_CODEC
 	select SND_SOC_MSM_STUB
 	select SND_SOC_MSM_HOSTLESS_PCM
 	select SND_DYNAMIC_MINORS
-#	select MSM_QDSP6_APRV2_GLINK
+	select MSM_QDSP6_APRV2_GLINK
 	select MSM_QDSP6_SSR
 	select MSM_QDSP6_PDR
 	select MSM_QDSP6_NOTIFIER
@@ -152,7 +170,7 @@ config SND_SOC_EXT_CODEC
 	select SND_SOC_CPE
 	select SND_SOC_WCD_CPE
 	select SND_HWDEP
-#	select MSM_ULTRASOUND
+	select MSM_ULTRASOUND
 	select DTS_EAGLE
 	select SND_SOC_SDM660_COMMON
 	select SND_SOC_COMPRESS
@@ -174,7 +192,6 @@ config SND_SOC_MSM8996
 	select SND_DYNAMIC_MINORS
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select SND_SOC_WCD9330
 	select SND_SOC_WCD9335
 	select SND_SOC_WSA881X
 	select SND_SOC_MSM_HDMI_CODEC_RX
@@ -219,35 +236,6 @@ config SND_SOC_MSM8998
         select DTS_EAGLE
 	help
 	 To add support for SoC audio on MSM8998.
-	 This will enable sound soc drivers which
-	 interfaces with DSP, also it will enable
-	 the machine driver and the corresponding
-	 DAI-links
-
-config SND_SOC_MSM8952
-	tristate "SoC Machine driver for MSM8952"
-	depends on ARCH_MSM8916
-	select SND_SOC_QDSP6V2
-	select SND_SOC_MSM_STUB
-	select SND_SOC_MSM_HOSTLESS_PCM
-	select SND_DYNAMIC_MINORS
-	select MSM_QDSP6_APRV2
-	select MSM_QDSP6V2_CODECS
-	select SND_SOC_WCD9330
-	select SND_SOC_WCD9335
-	select SND_SOC_WSA881X
-	select MFD_CORE
-	select QTI_PP
-	select DTS_SRS_TM
-	select DOLBY_DAP
-	select DOLBY_DS2
-	select SND_SOC_CPE
-	select SND_SOC_WCD_CPE
-	select SND_SOC_MSM_HDMI_DBA_CODEC_RX
-	select SND_HWDEP
-        select DTS_EAGLE
-	help
-	 To add support for SoC audio on MSM8952.
 	 This will enable sound soc drivers which
 	 interfaces with DSP, also it will enable
 	 the machine driver and the corresponding

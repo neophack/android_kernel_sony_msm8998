@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 #include <linux/debugfs.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
@@ -26,6 +31,11 @@
 
 #include <soc/qcom/scm.h>
 #include <soc/qcom/qseecomi.h>
+#include <soc/qcom/security_status.h>
+
+#ifdef CONFIG_LAST_LOGS
+#include <soc/qcom/last_logs_tz.h>
+#endif
 
 /* QSEE_LOG_BUF_SIZE = 32K */
 #define QSEE_LOG_BUF_SIZE 0x8000
@@ -57,6 +67,10 @@
  * TZ 3.X version info
  */
 #define QSEE_VERSION_TZ_3_X 0x800000
+/*
+ * TZ 4.X version info
+ */
+#define QSEE_VERSION_TZ_4_X 0x1000000
 
 #define TZBSP_AES_256_ENCRYPTED_KEY_SIZE 256
 #define TZBSP_NONCE_LEN 12
@@ -128,6 +142,18 @@ struct tzdbg_int_t {
 	 */
 	uint8_t int_desc[TZBSP_MAX_INT_DESC];
 	uint64_t int_count[TZBSP_MAX_CPU_COUNT]; /* # of times seen per CPU */
+};
+
+/*
+ * Interrupt Info Table used in tz version >=4.X
+ */
+struct tzdbg_int_t_tz40 {
+	uint16_t int_info;
+	uint8_t avail;
+	uint8_t spare;
+	uint32_t int_num;
+	uint8_t int_desc[TZBSP_MAX_INT_DESC];
+	uint32_t int_count[TZBSP_MAX_CPU_COUNT]; /* uint32_t in TZ ver >= 4.x*/
 };
 
 /* warm boot reason for cores */
@@ -291,6 +317,7 @@ struct tzdbg {
 	struct tzdbg_stat stat[TZDBG_STATS_MAX];
 	uint32_t hyp_debug_rw_buf_size;
 	bool is_hyplog_enabled;
+	uint32_t tz_version;
 };
 
 static struct tzdbg tzdbg = {
@@ -364,31 +391,9 @@ static int _disp_tz_boot_stats(void)
 	int len = 0;
 	struct tzdbg_boot_info_t *ptr = NULL;
 	struct tzdbg_boot_info64_t *ptr_64 = NULL;
-	int ret = 0;
-	uint32_t smc_id = 0;
-	uint32_t feature = 10;
-	struct qseecom_command_scm_resp resp = {};
-	struct scm_desc desc = {0};
 
-	if (!is_scm_armv8()) {
-		ret = scm_call(SCM_SVC_INFO, SCM_SVC_UTIL,  &feature,
-					sizeof(feature), &resp, sizeof(resp));
-	} else {
-		smc_id = TZ_INFO_GET_FEATURE_VERSION_ID;
-		desc.arginfo = TZ_INFO_GET_FEATURE_VERSION_ID_PARAM_ID;
-		desc.args[0] = feature;
-		ret = scm_call2(smc_id, &desc);
-		resp.result = desc.ret[0];
-	}
-
-	if (ret) {
-		pr_err("%s: scm_call to register log buffer failed\n",
-				__func__);
-		return 0;
-	}
-	pr_info("qsee_version = 0x%x\n", resp.result);
-
-	if (resp.result >= QSEE_VERSION_TZ_3_X) {
+	pr_info("qsee_version = 0x%x\n", tzdbg.tz_version);
+	if (tzdbg.tz_version >= QSEE_VERSION_TZ_3_X) {
 		ptr_64 = (struct tzdbg_boot_info64_t *)((unsigned char *)
 			tzdbg.diag_buf + tzdbg.diag_buf->boot_info_off);
 	} else {
@@ -397,7 +402,7 @@ static int _disp_tz_boot_stats(void)
 	}
 
 	for (i = 0; i < tzdbg.diag_buf->cpu_count; i++) {
-		if (resp.result >= QSEE_VERSION_TZ_3_X) {
+		if (tzdbg.tz_version >= QSEE_VERSION_TZ_3_X) {
 			len += snprintf(tzdbg.disp_buf + len,
 					(debug_rw_buf_size - 1) - len,
 					"  CPU #: %d\n"
@@ -482,22 +487,24 @@ static int _disp_tz_reset_stats(void)
 
 static int _disp_tz_interrupt_stats(void)
 {
-	int i, j, int_info_size;
+	int i, j;
 	int len = 0;
 	int *num_int;
-	unsigned char *ptr;
+	void *ptr;
 	struct tzdbg_int_t *tzdbg_ptr;
+	struct tzdbg_int_t_tz40 *tzdbg_ptr_tz40;
 
 	num_int = (uint32_t *)((unsigned char *)tzdbg.diag_buf +
 			(tzdbg.diag_buf->int_info_off - sizeof(uint32_t)));
 	ptr = ((unsigned char *)tzdbg.diag_buf +
 					tzdbg.diag_buf->int_info_off);
-	int_info_size = ((tzdbg.diag_buf->ring_off -
-				tzdbg.diag_buf->int_info_off)/(*num_int));
 
-	for (i = 0; i < (*num_int); i++) {
-		tzdbg_ptr = (struct tzdbg_int_t *)ptr;
-		len += snprintf(tzdbg.disp_buf + len,
+	pr_info("qsee_version = 0x%x\n", tzdbg.tz_version);
+
+	if (tzdbg.tz_version < QSEE_VERSION_TZ_4_X) {
+		tzdbg_ptr = ptr;
+		for (i = 0; i < (*num_int); i++) {
+			len += snprintf(tzdbg.disp_buf + len,
 				(debug_rw_buf_size - 1) - len,
 				"     Interrupt Number          : 0x%x\n"
 				"     Type of Interrupt         : 0x%x\n"
@@ -505,24 +512,53 @@ static int _disp_tz_interrupt_stats(void)
 				tzdbg_ptr->int_num,
 				(uint32_t)tzdbg_ptr->int_info,
 				(uint8_t *)tzdbg_ptr->int_desc);
-		for (j = 0; j < tzdbg.diag_buf->cpu_count; j++) {
-			len += snprintf(tzdbg.disp_buf + len,
+			for (j = 0; j < tzdbg.diag_buf->cpu_count; j++) {
+				len += snprintf(tzdbg.disp_buf + len,
 				(debug_rw_buf_size - 1) - len,
 				"     int_count on CPU # %d      : %u\n",
 				(uint32_t)j,
 				(uint32_t)tzdbg_ptr->int_count[j]);
-		}
-		len += snprintf(tzdbg.disp_buf + len, debug_rw_buf_size - 1,
-									"\n");
+			}
+			len += snprintf(tzdbg.disp_buf + len,
+					debug_rw_buf_size - 1, "\n");
 
-		if (len > (debug_rw_buf_size - 1)) {
-			pr_warn("%s: Cannot fit all info into the buffer\n",
+			if (len > (debug_rw_buf_size - 1)) {
+				pr_warn("%s: Cannot fit all info into buf\n",
 								__func__);
-			break;
+				break;
+			}
+			tzdbg_ptr++;
 		}
+	} else {
+		tzdbg_ptr_tz40 = ptr;
+		for (i = 0; i < (*num_int); i++) {
+			len += snprintf(tzdbg.disp_buf + len,
+				(debug_rw_buf_size - 1) - len,
+				"     Interrupt Number          : 0x%x\n"
+				"     Type of Interrupt         : 0x%x\n"
+				"     Description of interrupt  : %s\n",
+				tzdbg_ptr_tz40->int_num,
+				(uint32_t)tzdbg_ptr_tz40->int_info,
+				(uint8_t *)tzdbg_ptr_tz40->int_desc);
+			for (j = 0; j < tzdbg.diag_buf->cpu_count; j++) {
+				len += snprintf(tzdbg.disp_buf + len,
+				(debug_rw_buf_size - 1) - len,
+				"     int_count on CPU # %d      : %u\n",
+				(uint32_t)j,
+				(uint32_t)tzdbg_ptr_tz40->int_count[j]);
+			}
+			len += snprintf(tzdbg.disp_buf + len,
+					debug_rw_buf_size - 1, "\n");
 
-		ptr += int_info_size;
+			if (len > (debug_rw_buf_size - 1)) {
+				pr_warn("%s: Cannot fit all info into buf\n",
+								__func__);
+				break;
+			}
+			tzdbg_ptr_tz40++;
+		}
 	}
+
 	tzdbg.stat[TZDBG_INTERRUPT].data = tzdbg.disp_buf;
 	return len;
 }
@@ -1015,6 +1051,33 @@ static int __update_hypdbg_base(struct platform_device *pdev,
 	return 0;
 }
 
+static void tzdbg_get_tz_version(void)
+{
+	uint32_t smc_id = 0;
+	uint32_t feature = 10;
+	struct qseecom_command_scm_resp resp = {0};
+	struct scm_desc desc = {0};
+	int ret = 0;
+
+	if (!is_scm_armv8()) {
+		ret = scm_call(SCM_SVC_INFO, SCM_SVC_UTIL,  &feature,
+					sizeof(feature), &resp, sizeof(resp));
+	} else {
+		smc_id = TZ_INFO_GET_FEATURE_VERSION_ID;
+		desc.arginfo = TZ_INFO_GET_FEATURE_VERSION_ID_PARAM_ID;
+		desc.args[0] = feature;
+		ret = scm_call2(smc_id, &desc);
+		resp.result = desc.ret[0];
+	}
+
+	if (ret)
+		pr_err("%s: scm_call to get tz version failed\n",
+				__func__);
+	else
+		tzdbg.tz_version = resp.result;
+
+}
+
 /*
  * Driver functions
  */
@@ -1103,12 +1166,159 @@ static int tz_log_probe(struct platform_device *pdev)
 		goto err;
 
 	tzdbg_register_qsee_log_buf();
+
+	tzdbg_get_tz_version();
+
 	return 0;
 err:
 	kfree(tzdbg.diag_buf);
 	return -ENXIO;
 }
 
+#ifdef CONFIG_LAST_LOGS
+#define TZBSP_DIAG_MAGIC 0x747a6461
+#define MAX_BANNER_LEN 1024
+#define TZDBG_STATS_COUNT (TZDBG_LOG + 1)
+static int (*disp_stat[TZDBG_STATS_MAX])(void);
+static char *merge_buf;
+static uint32_t merge_buf_len;
+
+static int _tz_log_stats(void)
+{
+	static struct tzdbg_log_pos_t log_start = {0};
+	struct tzdbg_log_t *log_ptr;
+
+	log_ptr = (struct tzdbg_log_t *)((unsigned char *)tzdbg.diag_buf +
+			tzdbg.diag_buf->ring_off -
+			offsetof(struct tzdbg_log_t, log_buf));
+
+	/* No data in ring buffer, so no need to hang around */
+	if (log_ptr && log_ptr->log_pos.offset == 0 && log_ptr->log_pos.wrap == 0)
+		return 0;
+
+	return _disp_log_stats(log_ptr, &log_start,
+			tzdbg.diag_buf->ring_len, debug_rw_buf_size, TZDBG_LOG);
+}
+
+static void merge_buffers(void)
+{
+	int data_len = 0, len = 0, i, status = SECURITY_ON;
+
+	if (get_security_status(&status) < 0)
+		pr_warn("Unable to get security status.\n");
+
+	for (i = 0; i < TZDBG_STATS_COUNT; i++) {
+		if ((status == SECURITY_ON) && (i == TZDBG_LOG))
+			continue;
+
+		if ((len + MAX_BANNER_LEN + debug_rw_buf_size) <
+				merge_buf_len) {
+			len += snprintf(merge_buf + len,
+				MAX_BANNER_LEN, "\n\n--------%s--------\n\n",
+				tzdbg.stat[i].name);
+			data_len = disp_stat[i]();
+			memcpy(merge_buf + len, tzdbg.stat[i].data, data_len);
+			len += data_len;
+			memset(tzdbg.disp_buf, 0x0, debug_rw_buf_size);
+		}
+	}
+
+	merge_buf_len = len;
+	pr_info("Length of merged buffers %d\n", len);
+}
+
+int format_tzbsp_log(void *src, size_t src_sz, void **dst, uint32_t *dst_sz)
+{
+	char *save_disp_buf_addr = NULL;
+	uint32_t save_debug_rw_buf_size = 0;
+	struct tzdbg_t *dbg = (struct tzdbg_t *)src;
+	int ret = 0;
+
+	if (debug_rw_buf_size != src_sz)
+		pr_warn("%s: Diag buffer size does not match - 0x%lx",
+			__func__, src_sz);
+
+	if (dbg == NULL || !src_sz || !tzdbg.diag_buf)
+		return -EINVAL;
+
+	/* validate tzdiag area w.r.t magic */
+	if (dbg->magic_num != TZBSP_DIAG_MAGIC) {
+		pr_err("No magic found, magic: 0x%x\n", dbg->magic_num);
+		return -ENXIO;
+	}
+
+	/* As we use the tzdbg.disp_buf pointer, backup tzdbg.disp_buf and
+	   restore it before returns */
+	save_disp_buf_addr = tzdbg.disp_buf;
+	save_debug_rw_buf_size = debug_rw_buf_size;
+
+	/* Debug buffer size increased to 48k (12K*4) size.
+	   Because, formatted output buffer size is more than the
+	   unformatted buffer size */
+	/* debug_rw_buf_size is modified and will be restored
+	   before the function returns*/
+	debug_rw_buf_size = src_sz * 4;
+
+	/* Merge buffer increased to 294k size */
+	merge_buf_len = (debug_rw_buf_size + MAX_BANNER_LEN) *
+				TZDBG_STATS_COUNT;
+
+	merge_buf = kzalloc(merge_buf_len, GFP_KERNEL);
+	if (merge_buf == NULL) {
+		pr_err("%s: Can't Allocate memory: merged_buf\n",
+		__func__);
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	tzdbg.disp_buf = kzalloc(debug_rw_buf_size, GFP_KERNEL);
+	if (tzdbg.disp_buf == NULL) {
+		pr_err("%s: Can't Allocate memory: disp_buf\n",
+		__func__);
+		ret = -ENOMEM;
+		goto exit1;
+	}
+
+	memcpy(tzdbg.diag_buf, src, src_sz);
+
+	disp_stat[TZDBG_BOOT] = _disp_tz_boot_stats;
+	disp_stat[TZDBG_RESET] = _disp_tz_reset_stats;
+	disp_stat[TZDBG_INTERRUPT] = _disp_tz_interrupt_stats;
+	disp_stat[TZDBG_VMID] = _disp_tz_vmid_stats;
+	disp_stat[TZDBG_GENERAL] = _disp_tz_general_stats;
+	if (TZBSP_DIAG_MAJOR_VERSION_LEGACY <
+			(tzdbg.diag_buf->version >> 16)) {
+		disp_stat[TZDBG_LOG] = _tz_log_stats;
+	} else {
+		disp_stat[TZDBG_LOG] = _disp_tz_log_stats_legacy;
+	}
+
+	merge_buffers();
+	/* Allocate required buffer to store the formatted logs */
+	*dst = kzalloc(merge_buf_len, GFP_KERNEL);
+	if (*dst == NULL) {
+		pr_err("%s: Can't Allocate memory: buffer\n",
+		__func__);
+		ret = -ENOMEM;
+		goto exit2;
+	}
+
+	*dst_sz = merge_buf_len;
+	memcpy(*dst, merge_buf, *dst_sz);
+
+exit2:
+	memset(tzdbg.diag_buf, 0x0, src_sz);
+	kzfree(tzdbg.disp_buf);
+exit1:
+	kzfree(merge_buf);
+exit:
+	/* Restore tzdbg.disp_buf pointer and debug_rw_buf_size */
+	tzdbg.disp_buf = save_disp_buf_addr;
+	debug_rw_buf_size = save_debug_rw_buf_size;
+	return ret;
+}
+
+#endif
 
 static int tz_log_remove(struct platform_device *pdev)
 {
@@ -1133,6 +1343,7 @@ static struct platform_driver tz_log_driver = {
 		.name = "tz_log",
 		.owner = THIS_MODULE,
 		.of_match_table = tzlog_match,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

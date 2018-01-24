@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
@@ -718,42 +723,6 @@ gpio_cfg:
 	return rc;
 }
 
-int qpnp_pin_config(int gpio, struct qpnp_pin_cfg *param)
-{
-	int rc, chip_offset;
-	struct qpnp_pin_chip *q_chip;
-	struct qpnp_pin_spec *q_spec = NULL;
-	struct gpio_chip *gpio_chip;
-
-	if (param == NULL)
-		return -EINVAL;
-
-	mutex_lock(&qpnp_pin_chips_lock);
-	list_for_each_entry(q_chip, &qpnp_pin_chips, chip_list) {
-		gpio_chip = &q_chip->gpio_chip;
-		if (gpio >= gpio_chip->base
-				&& gpio < gpio_chip->base + gpio_chip->ngpio) {
-			chip_offset = gpio - gpio_chip->base;
-			q_spec = qpnp_chip_gpio_get_spec(q_chip, chip_offset);
-			if (WARN_ON(!q_spec)) {
-				mutex_unlock(&qpnp_pin_chips_lock);
-				return -ENODEV;
-			}
-			break;
-		}
-	}
-	mutex_unlock(&qpnp_pin_chips_lock);
-
-	if (!q_spec)
-		return -ENODEV;
-
-	rc = _qpnp_pin_config(q_chip, q_spec, param);
-
-	return rc;
-}
-EXPORT_SYMBOL(qpnp_pin_config);
-
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 static int _qpnp_get_pin_config(struct qpnp_pin_chip *q_chip,
 		struct qpnp_pin_spec *q_spec, struct qpnp_pin_cfg *param)
 {
@@ -864,7 +833,41 @@ int qpnp_get_pin_config(int gpio, struct qpnp_pin_cfg *param)
 	return rc;
 }
 EXPORT_SYMBOL(qpnp_get_pin_config);
-#endif /* CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION */
+
+int qpnp_pin_config(int gpio, struct qpnp_pin_cfg *param)
+{
+	int rc, chip_offset;
+	struct qpnp_pin_chip *q_chip;
+	struct qpnp_pin_spec *q_spec = NULL;
+	struct gpio_chip *gpio_chip;
+
+	if (param == NULL)
+		return -EINVAL;
+
+	mutex_lock(&qpnp_pin_chips_lock);
+	list_for_each_entry(q_chip, &qpnp_pin_chips, chip_list) {
+		gpio_chip = &q_chip->gpio_chip;
+		if (gpio >= gpio_chip->base
+				&& gpio < gpio_chip->base + gpio_chip->ngpio) {
+			chip_offset = gpio - gpio_chip->base;
+			q_spec = qpnp_chip_gpio_get_spec(q_chip, chip_offset);
+			if (WARN_ON(!q_spec)) {
+				mutex_unlock(&qpnp_pin_chips_lock);
+				return -ENODEV;
+			}
+			break;
+		}
+	}
+	mutex_unlock(&qpnp_pin_chips_lock);
+
+	if (!q_spec)
+		return -ENODEV;
+
+	rc = _qpnp_pin_config(q_chip, q_spec, param);
+
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_pin_config);
 
 int qpnp_pin_map(const char *name, uint32_t pmic_pin)
 {

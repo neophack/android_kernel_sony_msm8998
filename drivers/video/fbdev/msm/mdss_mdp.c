@@ -13,6 +13,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
 
@@ -1372,13 +1377,11 @@ static inline void __mdss_mdp_reg_access_clk_enable(
 		mdss_mdp_clk_update(MDSS_CLK_MNOC_AHB, 1);
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 1);
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 1);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU, 1);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU_RT, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 1);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 1);
 	} else {
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 0);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU_RT, 0);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MNOC_AHB, 0);
@@ -1419,8 +1422,7 @@ static void __mdss_mdp_clk_control(struct mdss_data_type *mdata, bool enable)
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_LUT, 1);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU, 1);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU_RT, 1);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 1);
 		if (mdata->vsync_ena)
 			mdss_mdp_clk_update(MDSS_CLK_MDP_VSYNC, 1);
 	} else {
@@ -1431,13 +1433,12 @@ static void __mdss_mdp_clk_control(struct mdss_data_type *mdata, bool enable)
 		if (mdata->vsync_ena)
 			mdss_mdp_clk_update(MDSS_CLK_MDP_VSYNC, 0);
 
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU_RT, 0);
-		mdss_mdp_clk_update(MDSS_CLK_MDP_TBU, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_LUT, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MNOC_AHB, 0);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 0);
 
 		/* release iommu control */
 		mdss_iommu_ctrl(0);
@@ -1527,7 +1528,7 @@ int mdss_iommu_ctrl(int enable)
 		 * delay iommu attach until continous splash screen has
 		 * finished handoff, as it may still be working with phys addr
 		 */
-		if (mdata->iommu_ref_cnt == 0) {
+		if (!mdata->iommu_attached && !mdata->handoff_pending) {
 			mdss_bus_rt_bw_vote(true);
 			rc = mdss_smmu_attach(mdata);
 		}
@@ -1801,7 +1802,8 @@ static inline int mdss_mdp_irq_clk_register(struct mdss_data_type *mdata,
 
 static void __mdss_restore_sec_cfg(struct mdss_data_type *mdata)
 {
-	int ret, scm_ret = 0;
+	int ret;
+	u64 scm_ret = 0;
 
 	if (test_bit(MDSS_CAPS_SCM_RESTORE_NOT_REQUIRED, mdata->mdss_caps_map))
 		return;
@@ -1812,7 +1814,7 @@ static void __mdss_restore_sec_cfg(struct mdss_data_type *mdata)
 
 	ret = scm_restore_sec_cfg(SEC_DEVICE_MDSS, 0, &scm_ret);
 	if (ret || scm_ret)
-		pr_warn("scm_restore_sec_cfg failed %d %d\n",
+		pr_warn("scm_restore_sec_cfg failed %d %llu\n",
 				ret, scm_ret);
 
 	__mdss_mdp_reg_access_clk_enable(mdata, false);
@@ -1923,15 +1925,8 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	if (mdss_mdp_irq_clk_register(mdata, "bus_clk", MDSS_CLK_AXI) ||
 	    mdss_mdp_irq_clk_register(mdata, "iface_clk", MDSS_CLK_AHB) ||
-	    mdss_mdp_irq_clk_register(mdata, "core_clk",
-				      MDSS_CLK_MDP_CORE))
+	    mdss_mdp_irq_clk_register(mdata, "core_clk", MDSS_CLK_MDP_CORE))
 		return -EINVAL;
-
-	/* tbu_clk is not present on all MDSS revisions */
-	mdss_mdp_irq_clk_register(mdata, "tbu_clk", MDSS_CLK_MDP_TBU);
-
-	/* tbu_rt_clk is not present on all MDSS revisions */
-	mdss_mdp_irq_clk_register(mdata, "tbu_rt_clk", MDSS_CLK_MDP_TBU_RT);
 
 	/* lut_clk is not present on all MDSS revisions */
 	mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT);
@@ -1941,6 +1936,10 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	/* this clk is not present on all MDSS revisions */
 	mdss_mdp_irq_clk_register(mdata, "mnoc_clk", MDSS_CLK_MNOC_AHB);
+
+	/* this clk is not present on all MDSS revisions */
+	mdss_mdp_irq_clk_register(mdata, "throttle_bus_clk",
+				  MDSS_CLK_THROTTLE_AXI);
 
 	/* Setting the default clock rate to the max supported.*/
 	mdss_mdp_set_clk_rate(mdata->max_mdp_clk_rate, false);
@@ -2040,7 +2039,7 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 	/* prevent disable of prefill calculations */
 	mdata->min_prefill_lines = 0xffff;
 	/* clock gating feature is enabled by default */
-	mdata->enable_gate = true;
+	mdata->enable_gate = false;
 	mdata->pixel_ram_size = 0;
 	mem_protect_sd_ctrl_id = MEM_PROTECT_SD_CTRL_FLAT;
 
@@ -2097,21 +2096,10 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdata->props = mdss_get_props();
 		break;
 	case MDSS_MDP_HW_REV_112:
-	case MDSS_MDP_HW_REV_111:
-		pr_info("mdss_mdp: Setting caps for HW_REV_111.\n");
 		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 64;
 		mdata->min_prefill_lines = 12;
-		mdata->has_ubwc = true;
-		set_bit(MDSS_QOS_OVERHEAD_FACTOR, mdata->mdss_qos_map);
-		set_bit(MDSS_QOS_PER_PIPE_LUT, mdata->mdss_qos_map);
-		set_bit(MDSS_QOS_SIMPLIFIED_PREFILL, mdata->mdss_qos_map);
-		set_bit(MDSS_CAPS_YUV_CONFIG, mdata->mdss_caps_map);
-		mdss_mdp_init_default_prefill_factors(mdata);
 		set_bit(MDSS_QOS_OTLIM, mdata->mdss_qos_map);
-		mdss_set_quirk(mdata, MDSS_QUIRK_MIN_BUS_VOTE);
-		mdss_set_quirk(mdata, MDSS_QUIRK_DMA_BI_DIR);
-		mdss_set_quirk(mdata, MDSS_QUIRK_NEED_SECURE_MAP);
 		break;
 	case MDSS_MDP_HW_REV_114:
 		/* disable ECG for 28nm PHY platform */
@@ -2198,7 +2186,6 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_set_quirk(mdata, MDSS_QUIRK_MDP_CLK_SET_RATE);
 		mdata->has_wb_ubwc = true;
 		set_bit(MDSS_CAPS_10_BIT_SUPPORTED, mdata->mdss_caps_map);
-		set_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map);
 		set_bit(MDSS_CAPS_SEC_DETACH_SMMU, mdata->mdss_caps_map);
 		mdss_set_quirk(mdata, MDSS_QUIRK_HDR_SUPPORT_ENABLED);
 		break;
@@ -2609,6 +2596,7 @@ static int mdss_mdp_get_cmdline_config(struct platform_device *pdev)
 
 	len = strlen(mdss_mdp_panel);
 
+	len = 0; /* temporary */
 	if (len > 0) {
 		rc = mdss_mdp_get_pan_cfg(pan_cfg);
 		if (!rc) {
@@ -2798,6 +2786,8 @@ ssize_t mdss_mdp_show_capabilities(struct device *dev,
 		SPRINT(" avr");
 	if (mdss_has_quirk(mdata, MDSS_QUIRK_HDR_SUPPORT_ENABLED))
 		SPRINT(" hdr");
+	if (mdata->nvig_pipes && mdata->mdp_rev >= MDSS_MDP_HW_REV_300)
+		SPRINT(" vig_csc_db"); /* double buffered VIG CSC block */
 	SPRINT("\n");
 #undef SPRINT
 
@@ -4459,8 +4449,6 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 		pr_debug("wfd mode: %s\n", wfd_data);
 		if (!strcmp(wfd_data, "intf")) {
 			mdata->wfd_mode = MDSS_MDP_WFD_INTERFACE;
-		} else if (!strcmp(wfd_data, "intf_no_dspp")) {
-			mdata->wfd_mode = MDSS_MDP_WFD_INTF_NO_DSPP;
 		} else if (!strcmp(wfd_data, "shared")) {
 			mdata->wfd_mode = MDSS_MDP_WFD_SHARED;
 		} else if (!strcmp(wfd_data, "dedicated")) {
@@ -4547,6 +4535,15 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->clk_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-clk-factor",
 		&mdata->clk_factor);
+
+	/*
+	 * Bus throughput factor will be used during high downscale cases.
+	 * The recommended default factor is 1.1.
+	 */
+	mdata->bus_throughput_factor.numer = 11;
+	mdata->bus_throughput_factor.denom = 10;
+	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-bus-througput-factor",
+		&mdata->bus_throughput_factor);
 
 	rc = of_property_read_u32(pdev->dev.of_node,
 			"qcom,max-bandwidth-low-kbps", &mdata->max_bw_low);
@@ -4949,7 +4946,6 @@ static void apply_dynamic_ot_limit(u32 *ot_lim,
 		params->is_yuv, params->is_wfd, res, params->frame_rate);
 
 	switch (mdata->mdp_rev) {
-	case MDSS_MDP_HW_REV_111:
 	case MDSS_MDP_HW_REV_114:
 	case MDSS_MDP_HW_REV_115:
 	case MDSS_MDP_HW_REV_116:

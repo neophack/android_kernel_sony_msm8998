@@ -10,6 +10,11 @@
  *
  *  You may use this code as per GPL version 2
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2014 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/ctype.h>
 #include <linux/device.h>
@@ -46,7 +51,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 	static char *type_text[] = {
 		"Unknown", "Battery", "UPS", "Mains", "USB", "USB_DCP",
 		"USB_CDP", "USB_ACA", "USB_HVDCP", "USB_HVDCP_3", "USB_PD",
-		"Wireless", "BMS", "Parallel", "Main", "Wipower",
+		"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
 		"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
 	};
 	static char *status_text[] = {
@@ -81,7 +86,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Non compliant",
 	};
 	static char *typec_pr_text[] = {
-		"none", "dual power role", "sink", "source"
+		"none", "dual power role", "sink", "source", "sink_delay"
 	};
 	ssize_t ret = 0;
 	struct power_supply *psy = dev_get_drvdata(dev);
@@ -114,7 +119,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 		return sprintf(buf, "%s\n", technology_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_CAPACITY_LEVEL)
 		return sprintf(buf, "%s\n", capacity_level_text[value.intval]);
-	else if (off == POWER_SUPPLY_PROP_TYPE)
+	else if (off == POWER_SUPPLY_PROP_TYPE ||
+			off == POWER_SUPPLY_PROP_REAL_TYPE)
 		return sprintf(buf, "%s\n", type_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_SCOPE)
 		return sprintf(buf, "%s\n", scope_text[value.intval]);
@@ -264,6 +270,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(dp_dm),
 	POWER_SUPPLY_ATTR(input_current_limited),
 	POWER_SUPPLY_ATTR(input_current_now),
+	POWER_SUPPLY_ATTR(charge_qnovo_enable),
 	POWER_SUPPLY_ATTR(current_qnovo),
 	POWER_SUPPLY_ATTR(voltage_qnovo),
 	POWER_SUPPLY_ATTR(rerun_aicl),
@@ -292,12 +299,16 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(die_health),
 	POWER_SUPPLY_ATTR(connector_health),
 	POWER_SUPPLY_ATTR(ctm_current_max),
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+	POWER_SUPPLY_ATTR(hw_current_max),
+	POWER_SUPPLY_ATTR(real_type),
+	POWER_SUPPLY_ATTR(pr_swap),
+	POWER_SUPPLY_ATTR(cc_step),
+	POWER_SUPPLY_ATTR(cc_step_sel),
+	POWER_SUPPLY_ATTR(sw_jeita_enabled),
+	POWER_SUPPLY_ATTR(pd_voltage_max),
+	POWER_SUPPLY_ATTR(pd_voltage_min),
+	POWER_SUPPLY_ATTR(sdp_current_max),
 	POWER_SUPPLY_ATTR(skin_temp),
-#endif
-#if defined(CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION) || \
-    defined(CONFIG_QPNP_SMBCHARGER_EXTENSION)   || \
-    defined(CONFIG_QPNP_FG_EXTENSION)
 	POWER_SUPPLY_ATTR(smart_charging_activation),
 	POWER_SUPPLY_ATTR(smart_charging_interruption),
 	POWER_SUPPLY_ATTR(smart_charging_status),
@@ -309,20 +320,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(charge_full_raw),
 	POWER_SUPPLY_ATTR(time_to_cap_learning),
 	POWER_SUPPLY_ATTR(int_cld),
-#endif /* CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION ||
-	* CONFIG_QPNP_SMBCHARGER_EXTENSION   ||
-	* CONFIG_QPNP_FG_EXTENSION */
-#if defined(CONFIG_QPNP_SMBCHARGER_EXTENSION) || \
-    defined(CONFIG_QPNP_FG_EXTENSION)
-	POWER_SUPPLY_ATTR(usbin_det),
-	POWER_SUPPLY_ATTR(sub_type),
-	POWER_SUPPLY_ATTR(enable_shutdown_at_low_battery),
-	POWER_SUPPLY_ATTR(fv_cfg),
-	POWER_SUPPLY_ATTR(fv_cmp_cfg),
-	POWER_SUPPLY_ATTR(batt_aging),
-	POWER_SUPPLY_ATTR(input_current_state),
-#endif /* CONFIG_QPNP_SMBCHARGER_EXTENSION || CONFIG_QPNP_FG_EXTENSION */
-
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */
@@ -330,11 +327,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(manufacturer),
 	POWER_SUPPLY_ATTR(serial_number),
 	POWER_SUPPLY_ATTR(battery_type),
-#if defined(CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION) || \
-    defined(CONFIG_QPNP_SMBCHARGER_EXTENSION)   || \
-    defined(CONFIG_QPNP_FG_EXTENSION)
 	POWER_SUPPLY_ATTR(charger_type),
-#endif
 };
 
 static struct attribute *

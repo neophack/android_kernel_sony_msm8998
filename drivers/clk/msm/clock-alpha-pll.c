@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -466,7 +466,7 @@ static int alpha_pll_set_rate(struct clk *c, unsigned long rate);
 static int dyna_alpha_pll_set_rate(struct clk *c, unsigned long rate)
 {
 	struct alpha_pll_clk *pll = to_alpha_pll_clk(c);
-	unsigned long freq_hz, flags = 0;
+	unsigned long freq_hz, flags;
 	u32 l_val, vco_val;
 	u64 a_val;
 	int ret;
@@ -595,7 +595,7 @@ static int alpha_pll_set_rate(struct clk *c, unsigned long rate)
 {
 	struct alpha_pll_clk *pll = to_alpha_pll_clk(c);
 	struct alpha_pll_masks *masks = pll->masks;
-	unsigned long flags = 0, freq_hz = 0;
+	unsigned long flags, freq_hz;
 	u32 regval, l_val;
 	int vco_val;
 	u64 a_val;
@@ -806,15 +806,8 @@ static enum handoff alpha_pll_handoff(struct clk *c)
 	update_vco_tbl(pll);
 
 	if (!is_locked(pll)) {
-		if (pll->slew) {
-			if (c->rate && dyna_alpha_pll_set_rate(c, c->rate))
-				WARN(1, "%s: Failed to configure rate\n",
-					c->dbg_name);
-		} else {
-			if (c->rate && alpha_pll_set_rate(c, c->rate))
-				WARN(1, "%s: Failed to configure rate\n",
-					c->dbg_name);
-		}
+		if (c->rate && alpha_pll_set_rate(c, c->rate))
+			WARN(1, "%s: Failed to configure rate\n", c->dbg_name);
 		__init_alpha_pll(c);
 		return HANDOFF_DISABLED_CLK;
 	} else if (pll->fsm_en_mask && !is_fsm_mode(MODE_REG(pll))) {
@@ -959,7 +952,7 @@ static void fabia_alpha_pll_disable(struct clk *c)
 static int fabia_alpha_pll_set_rate(struct clk *c, unsigned long rate)
 {
 	struct alpha_pll_clk *pll = to_alpha_pll_clk(c);
-	unsigned long flags = 0, freq_hz = 0;
+	unsigned long flags, freq_hz;
 	u32 l_val;
 	u64 a_val;
 

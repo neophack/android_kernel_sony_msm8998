@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef __FG_CORE_H__
 #define __FG_CORE_H__
@@ -29,7 +34,7 @@
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include "pmic-voter.h"
+#include <linux/pmic-voter.h>
 
 #define fg_dbg(chip, reason, fmt, ...)			\
 	do {							\
@@ -46,10 +51,16 @@
 			&& (value) <= (right)))
 
 /* Awake votable reasons */
-#define SRAM_READ	"fg_sram_read"
-#define SRAM_WRITE	"fg_sram_write"
-#define PROFILE_LOAD	"fg_profile_load"
-#define DELTA_SOC	"fg_delta_soc"
+#define SRAM_READ		"fg_sram_read"
+#define SRAM_WRITE		"fg_sram_write"
+#define PROFILE_LOAD		"fg_profile_load"
+#define TTF_PRIMING		"fg_ttf_priming"
+
+/* Delta BSOC irq votable reasons */
+#define DELTA_BSOC_IRQ_VOTER	"fg_delta_bsoc_irq"
+
+/* Battery missing irq votable reasons */
+#define BATT_MISS_IRQ_VOTER	"fg_batt_miss_irq"
 
 #define DEBUG_PRINT_BUFFER_SIZE		64
 /* 3 byte address + 1 space character */
@@ -75,6 +86,8 @@
 
 #define BATT_THERM_NUM_COEFFS		3
 
+#define MAX_CC_STEPS			20
+
 /* Debug flag definitions */
 enum fg_debug_flag {
 	FG_IRQ			= BIT(0), /* Show interrupts */
@@ -86,8 +99,8 @@ enum fg_debug_flag {
 	FG_BUS_READ		= BIT(6), /* Show REGMAP reads */
 	FG_CAP_LEARN		= BIT(7), /* Show capacity learning */
 	FG_TTF			= BIT(8), /* Show time to full */
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-	FG_SOMC			= BIT(15), /* SoMC Extension messages */
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
+	FG_SOMC			= BIT(15),
 #endif
 };
 
@@ -128,11 +141,6 @@ enum fg_irq_index {
 	FG_IRQ_MAX,
 };
 
-/* WA flags */
-enum {
-	DELTA_SOC_IRQ_WA = BIT(0),
-};
-
 /*
  * List of FG_SRAM parameters. Please add a parameter only if it is an entry
  * that will be used either to configure an entity (e.g. termination current)
@@ -152,6 +160,7 @@ enum fg_sram_param_id {
 	FG_SRAM_CC_SOC,
 	FG_SRAM_CC_SOC_SW,
 	FG_SRAM_ACT_BATT_CAP,
+	FG_SRAM_TIMEBASE,
 	/* Entries below here are configurable during initialization */
 	FG_SRAM_CUTOFF_VOLT,
 	FG_SRAM_EMPTY_VOLT,
@@ -162,6 +171,7 @@ enum fg_sram_param_id {
 	FG_SRAM_ESR_TIMER_DISCHG_INIT,
 	FG_SRAM_ESR_TIMER_CHG_MAX,
 	FG_SRAM_ESR_TIMER_CHG_INIT,
+	FG_SRAM_ESR_PULSE_THRESH,
 	FG_SRAM_SYS_TERM_CURR,
 	FG_SRAM_CHG_TERM_CURR,
 	FG_SRAM_CHG_TERM_BASE_CURR,
@@ -171,10 +181,11 @@ enum fg_sram_param_id {
 	FG_SRAM_RECHARGE_VBATT_THR,
 	FG_SRAM_KI_COEFF_MED_DISCHG,
 	FG_SRAM_KI_COEFF_HI_DISCHG,
+	FG_SRAM_KI_COEFF_FULL_SOC,
 	FG_SRAM_ESR_TIGHT_FILTER,
 	FG_SRAM_ESR_BROAD_FILTER,
 	FG_SRAM_SLOPE_LIMIT,
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 	FG_SRAM_SOC_SYSTEM,
 	FG_SRAM_SOC_MONOTONIC,
 	FG_SRAM_SOC_CUTOFF,
@@ -216,6 +227,7 @@ struct fg_alg_flag {
 
 enum wa_flags {
 	PMI8998_V1_REV_WA = BIT(0),
+	PM660_TSMC_OSC_WA = BIT(1),
 };
 
 enum slope_limit_status {
@@ -224,6 +236,17 @@ enum slope_limit_status {
 	HIGH_TEMP_DISCHARGE,
 	HIGH_TEMP_CHARGE,
 	SLOPE_LIMIT_NUM_COEFFS,
+};
+
+enum esr_timer_config {
+	TIMER_RETRY = 0,
+	TIMER_MAX,
+	NUM_ESR_TIMERS,
+};
+
+enum ttf_mode {
+	TTF_MODE_NORMAL = 0,
+	TTF_MODE_QNOVO,
 };
 
 /* DT parameters for FG device */
@@ -241,9 +264,9 @@ struct fg_dt_props {
 	int	recharge_soc_thr;
 	int	recharge_volt_thr_mv;
 	int	rsense_sel;
-	int	esr_timer_charging;
-	int	esr_timer_awake;
-	int	esr_timer_asleep;
+	int	esr_timer_charging[NUM_ESR_TIMERS];
+	int	esr_timer_awake[NUM_ESR_TIMERS];
+	int	esr_timer_asleep[NUM_ESR_TIMERS];
 	int	rconn_mohms;
 	int	esr_clamp_mohms;
 	int	cl_start_soc;
@@ -261,13 +284,15 @@ struct fg_dt_props {
 	int	esr_tight_lt_flt_upct;
 	int	esr_broad_lt_flt_upct;
 	int	slope_limit_temp;
+	int	esr_pulse_thresh_ma;
+	int	esr_meas_curr_ma;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
 	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 	int	therm_coeff_c1;
 	int	therm_coeff_c2;
 	int	therm_coeff_c3;
@@ -300,6 +325,17 @@ struct fg_cap_learning {
 	int64_t		final_cc_uah;
 	int64_t		learned_cc_uah;
 	struct mutex	lock;
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
+	int		batt_soc_drop;
+	int		cc_soc_drop;
+	int		max_bsoc_during_active;
+	int		max_ccsoc_during_active;
+	s64		max_bsoc_time_ms;
+	s64		start_time_ms;
+	s64		hold_time;
+	s64		total_time;
+	s64		learned_time_ms;
+#endif
 };
 
 struct fg_irq_info {
@@ -310,14 +346,29 @@ struct fg_irq_info {
 };
 
 struct fg_circ_buf {
-	int	arr[20];
+	int	arr[10];
 	int	size;
 	int	head;
+};
+
+struct fg_cc_step_data {
+	int arr[MAX_CC_STEPS];
+	int sel;
 };
 
 struct fg_pt {
 	s32 x;
 	s32 y;
+};
+
+struct ttf {
+	struct fg_circ_buf	ibatt;
+	struct fg_circ_buf	vbatt;
+	struct fg_cc_step_data	cc_step;
+	struct mutex		lock;
+	int			mode;
+	int			last_ttf;
+	s64			last_ms;
 };
 
 static const struct fg_pt fg_ln_table[] = {
@@ -332,13 +383,32 @@ static const struct fg_pt fg_ln_table[] = {
 	{ 128000,	4852 },
 };
 
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+/* each tuple is - <temperature in degC, Timebase> */
+static const struct fg_pt fg_tsmc_osc_table[] = {
+	{ -20,		395064 },
+	{ -10,		398114 },
+	{   0,		401669 },
+	{  10,		404641 },
+	{  20,		408856 },
+	{  25,		412449 },
+	{  30,		416532 },
+	{  40,		420289 },
+	{  50,		425020 },
+	{  60,		430160 },
+	{  70,		434175 },
+	{  80,		439475 },
+	{  90,		444992 },
+};
+
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 #define ORG_BATT_TYPE_SIZE	9
 #define BATT_TYPE_SIZE		(ORG_BATT_TYPE_SIZE + 2)
 #define BATT_TYPE_FIRST_HYPHEN	4
 #define BATT_TYPE_SECOND_HYPHEN	9
 #define BATT_TYPE_AGING_LEVEL	10
+
 #endif
+
 struct fg_chip {
 	struct device		*dev;
 	struct pmic_revid_data	*pmic_rev_id;
@@ -349,10 +419,14 @@ struct fg_chip {
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
 	struct power_supply	*parallel_psy;
+	struct power_supply	*pc_port_psy;
 	struct iio_channel	*batt_id_chan;
+	struct iio_channel	*die_temp_chan;
 	struct fg_memif		*sram;
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
+	struct votable		*delta_bsoc_irq_en_votable;
+	struct votable		*batt_miss_irq_en_votable;
 	struct fg_sram_param	*sp;
 	struct fg_alg_flag	*alg_flags;
 	int			*debug_mask;
@@ -362,9 +436,9 @@ struct fg_chip {
 	struct fg_cyc_ctr_data	cyc_ctr;
 	struct notifier_block	nb;
 	struct fg_cap_learning  cl;
+	struct ttf		ttf;
 	struct mutex		bus_lock;
 	struct mutex		sram_rw_lock;
-	struct mutex		batt_avg_lock;
 	struct mutex		charge_full_lock;
 	u32			batt_soc_base;
 	u32			batt_info_base;
@@ -372,16 +446,20 @@ struct fg_chip {
 	u32			rradc_base;
 	u32			wa_flags;
 	int			batt_id_ohms;
+	int			ki_coeff_full_soc;
 	int			charge_status;
 	int			prev_charge_status;
 	int			charge_done;
 	int			charge_type;
+	int			online_status;
 	int			last_soc;
 	int			last_batt_temp;
 	int			health;
 	int			maint_soc;
 	int			delta_soc;
 	int			last_msoc;
+	int			last_recharge_volt_mv;
+	int			esr_timer_charging_default[NUM_ESR_TIMERS];
 	enum slope_limit_status	slope_limit_sts;
 	bool			profile_available;
 	bool			profile_loaded;
@@ -393,21 +471,17 @@ struct fg_chip {
 	bool			esr_fcc_ctrl_en;
 	bool			soc_reporting_ready;
 	bool			esr_flt_cold_temp_en;
-	bool			bsoc_delta_irq_en;
 	bool			slope_limit_en;
+	bool			use_ima_single_mode;
 	struct completion	soc_update;
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;
 	struct work_struct	status_change_work;
-	struct work_struct	cycle_count_work;
-	struct delayed_work	batt_avg_work;
+	struct delayed_work	ttf_work;
 	struct delayed_work	sram_dump_work;
-	struct fg_circ_buf	ibatt_circ_buf;
-	struct fg_circ_buf	vbatt_circ_buf;
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+#if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 	/* Learning */
 	int64_t			charge_full_raw;
-	ktime_t			learning_timestamp;
 	int			rated_capacity;
 	int			initial_capacity;
 
@@ -473,8 +547,10 @@ extern void dump_sram(u8 *buf, int addr, int len);
 extern int64_t twos_compliment_extend(int64_t val, int s_bit_pos);
 extern s64 fg_float_decode(u16 val);
 extern bool is_input_present(struct fg_chip *chip);
+extern bool is_qnovo_en(struct fg_chip *chip);
 extern void fg_circ_buf_add(struct fg_circ_buf *, int);
 extern void fg_circ_buf_clr(struct fg_circ_buf *);
 extern int fg_circ_buf_avg(struct fg_circ_buf *, int *);
+extern int fg_circ_buf_median(struct fg_circ_buf *, int *);
 extern int fg_lerp(const struct fg_pt *, size_t, s32, s32 *);
 #endif

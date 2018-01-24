@@ -11,7 +11,7 @@
  */
 /*
  * NOTE: This file has been modified by Sony Mobile Communications Inc.
- * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
  * and licensed under the license of the file.
  */
 
@@ -672,6 +672,10 @@ static const struct qpnp_vadc_map_pt adcmap_100k_104ef_104fb_1875_vref[] = {
 	{ 46,	125 },
 };
 
+/*
+ * Voltage to temperature table for 100k pull up for NTCG104EF104 with
+ * 1.875V reference.
+ */
 static const struct qpnp_vadc_map_pt adcmap_100k_104ef_104fb_1875_vref_decidegc[] = {
 	{ 1831,	-400 },
 	{ 1814,	-350 },

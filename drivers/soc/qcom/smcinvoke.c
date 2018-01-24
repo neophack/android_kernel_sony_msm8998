@@ -17,7 +17,6 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
-#include <linux/of.h>
 #include <linux/anon_inodes.h>
 #include <linux/smcinvoke.h>
 #include <soc/qcom/scm.h>
@@ -190,21 +189,12 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, size_t in_buf_len,
 	struct scm_desc desc = {0};
 	size_t inbuf_flush_size = (1UL << get_order(in_buf_len)) * PAGE_SIZE;
 	size_t outbuf_flush_size = (1UL << get_order(out_buf_len)) * PAGE_SIZE;
-	size_t inbuf_sz = inbuf_flush_size;
-	size_t outbuf_sz = outbuf_flush_size;
-
-	if (of_machine_is_compatible("qcom,msm8996") ||
-	    of_machine_is_compatible("qcom,msm8956") ||
-	    of_machine_is_compatible("qcom,msm8939")) {
-		inbuf_sz = in_buf_len;
-		outbuf_sz = out_buf_len;
-	}
 
 	desc.arginfo = SMCINVOKE_TZ_PARAM_ID;
 	desc.args[0] = (uint64_t)virt_to_phys(in_buf);
-	desc.args[1] = inbuf_sz;
+	desc.args[1] = inbuf_flush_size;
 	desc.args[2] = (uint64_t)virt_to_phys(out_buf);
-	desc.args[3] = outbuf_sz;
+	desc.args[3] = outbuf_flush_size;
 
 	dmac_flush_range(in_buf, in_buf + inbuf_flush_size);
 	dmac_flush_range(out_buf, out_buf + outbuf_flush_size);
@@ -439,10 +429,17 @@ long smcinvoke_ioctl(struct file *filp, unsigned cmd, unsigned long arg)
 		if (ret)
 			goto out;
 
-		ret = marshal_out(in_msg, inmsg_size, &req, args_buf);
+		/*
+		 * if invoke op results in an err, no need to marshal_out and
+		 * copy args buf to user space
+		 */
+		if (!req.result) {
+			ret = marshal_out(in_msg, inmsg_size, &req, args_buf);
 
-		ret |=  copy_to_user((void __user *)(uintptr_t)(req.args),
+			ret |=  copy_to_user(
+					(void __user *)(uintptr_t)(req.args),
 					args_buf, nr_args * req.argsize);
+		}
 		ret |=  copy_to_user((void __user *)arg, &req, sizeof(req));
 		if (ret)
 			goto out;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -101,6 +101,7 @@ struct elem_info qmi_response_type_v01_ei[] = {
 		.ei_array	= NULL,
 	},
 };
+EXPORT_SYMBOL(qmi_response_type_v01_ei);
 
 struct elem_info qmi_error_resp_type_v01_ei[] = {
 	{
@@ -2136,7 +2137,6 @@ static void qmi_svc_event_notifier_init(void)
  */
 void qmi_log_init(void)
 {
-#ifdef CONFIG_IPC_LOGGING
 	qmi_req_resp_log_ctx =
 		ipc_log_context_create(QMI_REQ_RESP_LOG_PAGES,
 			"kqmi_req_resp", 0);
@@ -2148,7 +2148,6 @@ void qmi_log_init(void)
 	if (!qmi_ind_log_ctx)
 		pr_err("%s: Unable to create QMI IPC %s",
 				"logging for Indications", __func__);
-#endif
 }
 
 /**

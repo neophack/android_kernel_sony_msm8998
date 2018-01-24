@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/delay.h>
 #include <linux/clk.h>
@@ -584,7 +589,9 @@ static int msm_csiphy_2phase_lane_config_v50(
 	uint32_t lane_enable = 0, mask = 1;
 	uint16_t lane_mask = 0, i = 0, offset;
 	void __iomem *csiphybase;
-
+/* SONY_BEGIN (Change to internal bias) */
+	uint32_t tmp = 0;
+/* SONY_END (Change to internal bias) */
 	csiphybase = csiphy_dev->base;
 	lane_mask = csiphy_params->lane_mask & 0x1f;
 
@@ -684,14 +691,20 @@ static int msm_csiphy_2phase_lane_config_v50(
 				csiphybase + csiphy_dev->ctrl_reg->
 				csiphy_3ph_reg.
 				mipi_csiphy_2ph_lnn_ctrl15.addr + offset);
-			if (mask == CLOCK_LANE)
+			if (mask == CLOCK_LANE) {
 				msm_camera_io_w(csiphy_dev->ctrl_reg->
 					csiphy_3ph_reg.
 					mipi_csiphy_2ph_lnck_ctrl0.data,
 					csiphybase + csiphy_dev->ctrl_reg->
 					csiphy_3ph_reg.
 					mipi_csiphy_2ph_lnck_ctrl0.addr);
-			else
+				msm_camera_io_w(csiphy_dev->ctrl_reg->
+					csiphy_3ph_reg.
+					mipi_csiphy_2ph_lnck_ctrl9.data,
+					csiphybase + csiphy_dev->ctrl_reg->
+					csiphy_3ph_reg.
+					mipi_csiphy_2ph_lnck_ctrl9.addr);
+			} else {
 				msm_camera_io_w(csiphy_dev->ctrl_reg->
 					csiphy_3ph_reg.
 					mipi_csiphy_2ph_lnn_ctrl0.data,
@@ -699,6 +712,14 @@ static int msm_csiphy_2phase_lane_config_v50(
 					csiphy_3ph_reg.
 					mipi_csiphy_2ph_lnn_ctrl0.addr +
 					offset);
+				msm_camera_io_w(csiphy_dev->ctrl_reg->
+					csiphy_3ph_reg.
+					mipi_csiphy_2ph_lnn_ctrl9.data,
+					csiphybase + csiphy_dev->ctrl_reg->
+					csiphy_3ph_reg.
+					mipi_csiphy_2ph_lnn_ctrl9.addr +
+					offset);
+			}
 			msm_camera_io_w(csiphy_dev->ctrl_reg->
 				csiphy_3ph_reg.
 				mipi_csiphy_2ph_lnn_cfg1.data,
@@ -719,6 +740,28 @@ static int msm_csiphy_2phase_lane_config_v50(
 			mask <<= 1;
 		}
 	}
+/* SONY_BEGIN (Change to internal bias) */
+	/* 0x0CA34024 */
+	tmp = msm_camera_io_r(csiphybase + 0x24);
+	tmp |= 0x04;
+	msm_camera_io_w(tmp, csiphybase + 0x24);
+	/* 0x0CA34224 */
+	tmp = msm_camera_io_r(csiphybase + 0x224);
+	tmp |= 0x04;
+	msm_camera_io_w(tmp, csiphybase + 0x224);
+	/* 0x0CA34424 */
+	tmp = msm_camera_io_r(csiphybase + 0x424);
+	tmp |= 0x04;
+	msm_camera_io_w(tmp, csiphybase + 0x424);
+	/* 0x0CA34624 */
+	tmp = msm_camera_io_r(csiphybase + 0x624);
+	tmp |= 0x04;
+	msm_camera_io_w(tmp, csiphybase + 0x624);
+	/* 0x0CA34724 */
+	tmp = msm_camera_io_r(csiphybase + 0x724);
+	tmp |= 0x04;
+	msm_camera_io_w(tmp, csiphybase + 0x724);
+/* SONY_END (Change to internal bias) */
 	msm_csiphy_cphy_irq_config(csiphy_dev, csiphy_params);
 	return 0;
 }

@@ -15,10 +15,6 @@
  *
  */
 
-#ifdef CONFIG_ARCH_MSM8916
-#include <linux/usb/msm_hsusb_legacy.h>
-#else
-
 #ifndef __ASM_ARCH_MSM_HSUSB_H
 #define __ASM_ARCH_MSM_HSUSB_H
 
@@ -340,6 +336,5 @@ static inline int msm_dwc3_reset_dbm_ep(struct usb_ep *ep)
 	return -ENODEV;
 }
 
-#endif
 #endif
 #endif

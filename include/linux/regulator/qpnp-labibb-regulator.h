@@ -9,20 +9,38 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef _QPNP_LABIBB_REGULATOR_H
 #define _QPNP_LABIBB_REGULATOR_H
 
+#define SOMC_LABIBB_REGULATOR_ORG_IMPL
+
 #include <linux/regulator/driver.h>
 
 enum labibb_notify_event {
-	LAB_VREG_OK = 1,
+       LAB_VREG_OK = 1,
+	LAB_VREG_NOT_OK,
 };
 
 int qpnp_labibb_notifier_register(struct notifier_block *nb);
 int qpnp_labibb_notifier_unregister(struct notifier_block *nb);
 
-#ifdef CONFIG_REGULATOR_QPNP_LABIBB_SOMC
+#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
+bool qpnp_labibb_ocp_check(void);
+#else
+static inline bool qpnp_labibb_ocp_check(void)
+{
+	return false;
+}
+#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
+
+
+#ifdef SOMC_LABIBB_REGULATOR_ORG_IMPL
 /** This API is used to set precharge of LAB regulator
  * regulator: the reglator device
  * time: precharge time
@@ -109,5 +127,6 @@ static inline int qpnp_ibb_set_current_max(struct regulator *regulator,
 {
 	return -ENODEV;
 }
-#endif /* CONFIG_REGULATOR_QPNP_LABIBB_SOMC */
-#endif
+#endif /* SOMC_LABIBB_REGULATOR_ORG_IMPL */
+
+#endif /* _QPNP_LABIBB_REGULATOR_H */

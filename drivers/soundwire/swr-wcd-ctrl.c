@@ -1369,7 +1369,6 @@ static int swrm_probe(struct platform_device *pdev)
 {
 	struct swr_mstr_ctrl *swrm;
 	struct swr_ctrl_platform_data *pdata;
-	struct swr_device *swr_dev, *safe;
 	int ret;
 
 	/* Allocate soundwire master driver structure */
@@ -1470,9 +1469,6 @@ static int swrm_probe(struct platform_device *pdev)
 		goto err_mstr_fail;
 	}
 
-	if (pdev->dev.of_node)
-		of_register_swr_devices(&swrm->master);
-
 	/* Add devices registered with board-info as the
 	   controller will be up now
 	 */
@@ -1489,14 +1485,10 @@ static int swrm_probe(struct platform_device *pdev)
 	}
 	swrm->version = swrm->read(swrm->handle, SWRM_COMP_HW_VERSION);
 
-	/* Enumerate slave devices */
-	list_for_each_entry_safe(swr_dev, safe, &swrm->master.devices,
-				 dev_list) {
-		ret = swr_startup_devices(swr_dev);
-		if (ret)
-			list_del(&swr_dev->dev_list);
-	}
 	mutex_unlock(&swrm->mlock);
+
+	if (pdev->dev.of_node)
+		of_register_swr_devices(&swrm->master);
 
 	dbgswrm = swrm;
 	debugfs_swrm_dent = debugfs_create_dir(dev_name(&pdev->dev), 0);
@@ -1721,8 +1713,10 @@ int swrm_wcd_notify(struct platform_device *pdev, u32 id, void *data)
 		mutex_lock(&swrm->reslock);
 		if ((swrm->state == SWR_MSTR_RESUME) ||
 		    (swrm->state == SWR_MSTR_UP)) {
-			dev_dbg(swrm->dev, "%s: SWR master is already UP: %d\n",
-				__func__, swrm->state);
+			dev_dbg(swrm->dev, "%s: SWR master is already UP: %d. Do slave reset\n",
+						__func__, swrm->state);
+			list_for_each_entry(swr_dev, &mstr->devices, dev_list)
+				ret = swr_reset_device(swr_dev);
 		} else {
 			pm_runtime_mark_last_busy(&pdev->dev);
 			mutex_unlock(&swrm->reslock);

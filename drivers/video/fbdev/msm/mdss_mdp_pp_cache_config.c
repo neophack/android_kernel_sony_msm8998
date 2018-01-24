@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -194,8 +194,12 @@ static int pp_hist_lut_cache_params_pipe_v1_7(struct mdp_hist_lut_data *config,
 		return -EINVAL;
 	}
 
-	memcpy(&hist_lut_usr_config, config->cfg_payload,
-		sizeof(struct mdp_hist_lut_data_v1_7));
+	if (copy_from_user(&hist_lut_usr_config,
+				(void __user *) config->cfg_payload,
+				sizeof(hist_lut_usr_config))) {
+		pr_err("failed to copy hist lut config\n");
+		return -EFAULT;
+	}
 
 	hist_lut_cache_data = pipe->pp_res.hist_lut_cfg_payload;
 	if (!hist_lut_cache_data) {
@@ -606,8 +610,12 @@ static int pp_pcc_cache_params_pipe_v1_7(struct mdp_pcc_cfg_data *config,
 		return -EINVAL;
 	}
 
-	memcpy(&v17_usr_config, config->cfg_payload,
-			sizeof(v17_usr_config));
+	if (copy_from_user(&v17_usr_config,
+				(void __user *) config->cfg_payload,
+				sizeof(v17_usr_config))) {
+		pr_err("failed to copy pcc config\n");
+		return -EFAULT;
+	}
 
 	if (!(config->ops & MDP_PP_OPS_WRITE)) {
 		pr_debug("write ops not set value of flag is %d\n",
@@ -673,16 +681,8 @@ static int pp_pcc_cache_params_v1_7(struct mdp_pcc_cfg_data *config,
 		if (copy_from_user(&v17_usr_config, config->cfg_payload,
 				   sizeof(v17_usr_config))) {
 			pr_err("failed to copy v17 pcc\n");
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-			if (config->cfg_payload != NULL)
-				memcpy(&v17_usr_config, config->cfg_payload,
-					sizeof(struct mdp_pcc_data_v1_7));
-			else
-#endif
-			{
-				ret = -EFAULT;
-				goto pcc_config_exit;
-			}
+			ret = -EFAULT;
+			goto pcc_config_exit;
 		}
 		if ((config->ops & MDP_PP_OPS_DISABLE)) {
 			pr_debug("disable pcc\n");
@@ -869,8 +869,12 @@ static int pp_igc_lut_cache_params_pipe_v1_7(struct mdp_igc_lut_data *config,
 		goto igc_config_exit;
 	}
 
-	memcpy(&v17_usr_config, config->cfg_payload,
-			sizeof(v17_usr_config));
+	if (copy_from_user(&v17_usr_config,
+				(void __user *) config->cfg_payload,
+				sizeof(v17_usr_config))) {
+		pr_err("failed to copy igc usr config\n");
+		return -EFAULT;
+	}
 
 	if (!(config->ops & MDP_PP_OPS_WRITE)) {
 		pr_debug("op for gamut %d\n", config->ops);
@@ -1190,17 +1194,9 @@ static int pp_pa_cache_params_v1_7(struct mdp_pa_v2_cfg_data *config,
 
 	if (copy_from_user(&pa_usr_config, config->cfg_payload,
 			   sizeof(pa_usr_config))) {
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-		if (config->cfg_payload != NULL)
-			memcpy(&pa_usr_config, config->cfg_payload,
-				sizeof(struct mdp_pa_data_v1_7));
-		else
-#endif
-		{
-			pr_err("Failed to copy v1_7 PA\n");
-			ret = -EFAULT;
-			goto pa_config_exit;
-		}
+		pr_err("Failed to copy v1_7 PA\n");
+		ret = -EFAULT;
+		goto pa_config_exit;
 	}
 
 	if ((config->flags & MDP_PP_OPS_DISABLE)) {
@@ -1288,8 +1284,12 @@ static int pp_pa_cache_params_pipe_v1_7(struct mdp_pa_v2_cfg_data *config,
 		return -EINVAL;
 	}
 
-	memcpy(&pa_usr_config, config->cfg_payload,
-			sizeof(struct mdp_pa_data_v1_7));
+	if (copy_from_user(&pa_usr_config,
+				(void __user *) config->cfg_payload,
+				sizeof(pa_usr_config))) {
+		pr_err("failed to copy pa usr config\n");
+		return -EFAULT;
+	}
 
 	pa_cache_data = pipe->pp_res.pa_cfg_payload;
 	if (!pa_cache_data) {
@@ -1748,7 +1748,7 @@ static int pp_igc_lut_cache_params_pipe_v3(
 		u32 copy_from_kernel)
 {
 	struct mdp_igc_lut_data_config *v3_cache_data = NULL;
-	struct mdp_igc_lut_data_payload v3_usr_config = { 0 };
+	struct mdp_igc_lut_data_payload v3_usr_config;
 	u32 *c0_c1_data, *c2_data, len;
 	int ret = 0, fix_up = 0, i = 0;
 	u32 table_fmt = mdp_igc_rec_max, strength = 0;

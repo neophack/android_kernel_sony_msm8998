@@ -363,9 +363,7 @@ int udf_get_filename(struct super_block *sb, uint8_t *sname, int slen,
 		goto out1;
 	}
 
-	if (udf_build_ustr_exact(unifilename, sname, slen))
-		goto out2;
-
+	udf_build_ustr_exact(unifilename, sname, slen);
 	if (UDF_QUERY_FLAG(sb, UDF_FLAG_UTF8)) {
 		ret = udf_CS0toUTF8(filename, unifilename);
 		if (ret < 0) {
@@ -384,7 +382,7 @@ int udf_get_filename(struct super_block *sb, uint8_t *sname, int slen,
 	} else
 		BUG();
 
-	len = udf_translate_to_linux(dname, dlen,
+	ret = udf_translate_to_linux(dname, dlen,
 				     filename->u_name, filename->u_len,
 				     unifilename->u_name, unifilename->u_len);
 	/* Zero length filename isn't valid... */

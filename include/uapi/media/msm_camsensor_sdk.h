@@ -1,3 +1,8 @@
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 #ifndef __UAPI_LINUX_MSM_CAMSENSOR_SDK_H
 #define __UAPI_LINUX_MSM_CAMSENSOR_SDK_H
 
@@ -40,13 +45,15 @@
 #define MAX_ACTUATOR_SCENARIO     8
 #define MAX_ACT_MOD_NAME_SIZE     32
 #define MAX_ACT_NAME_SIZE         32
-#define MAX_ACTUATOR_INIT_SET     2000
+#define MAX_ACTUATOR_INIT_SET     120
 #define MAX_I2C_REG_SET           12
 
 #define MAX_LED_TRIGGERS          3
 
 #define MSM_EEPROM_MEMORY_MAP_MAX_SIZE  80
 #define MSM_EEPROM_MAX_MEM_MAP_CNT      8
+
+#define MSM_SENSOR_BYPASS_VIDEO_NODE    1
 
 enum msm_sensor_camera_id_t {
 	CAMERA_0,
@@ -111,8 +118,10 @@ enum msm_sensor_power_seq_gpio_t {
 	SENSOR_GPIO_FL_RESET,
 	SENSOR_GPIO_CUSTOM1,
 	SENSOR_GPIO_CUSTOM2,
+	SENSOR_GPIO_CUSTOM3,
 	SENSOR_GPIO_MAX,
 };
+#define SENSOR_GPIO_CUSTOM3 SENSOR_GPIO_CUSTOM3
 
 enum msm_ir_cut_filter_gpio_t {
 	IR_CUT_FILTER_GPIO_P = 0,
@@ -174,7 +183,6 @@ enum actuator_type {
 	ACTUATOR_PIEZO,
 	ACTUATOR_HVCM,
 	ACTUATOR_BIVCM,
-	ACTUATOR_VCM2,
 };
 
 enum msm_flash_driver_type {
@@ -301,6 +309,7 @@ struct msm_camera_sensor_slave_info {
 	unsigned char  is_init_params_valid;
 	struct msm_sensor_init_params sensor_init_params;
 	enum msm_sensor_output_format_t output_format;
+	uint8_t bypass_video_node_creation;
 };
 
 struct msm_camera_i2c_reg_array {
@@ -363,6 +372,9 @@ struct msm_camera_i2c_seq_reg_array {
 };
 
 struct msm_camera_i2c_seq_reg_setting {
+/* extension begin */
+	unsigned short slave_addr;
+/* extension end */
 	struct msm_camera_i2c_seq_reg_array *reg_setting;
 	unsigned short size;
 	enum msm_camera_i2c_reg_addr_type addr_type;

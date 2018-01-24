@@ -12,6 +12,11 @@
  *
  */
 /*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
+/*
  * SOC Info Routines
  *
  */
@@ -29,6 +34,9 @@
 #include <linux/string.h>
 #include <linux/types.h>
 
+#ifdef CONFIG_RAMDUMP_TAGS
+#include <linux/rdtags.h>
+#endif
 #include <asm/system_misc.h>
 
 #include <soc/qcom/socinfo.h>
@@ -47,6 +55,18 @@
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
 static DECLARE_RWSEM(current_image_rwsem);
+
+#ifdef CONFIG_RAMDUMP_TAGS
+#define RDT_ADD_UINT(func, name) \
+	do { \
+		res = func(); \
+		if (res != 0) { \
+			snprintf(buf, sizeof(buf), "%u (0x%.8X)", res, res); \
+			rdtags_add_tag(name, buf, strnlen(buf, sizeof(buf))); \
+		} \
+	} while (0)
+#endif
+
 enum {
 	HW_PLATFORM_UNKNOWN = 0,
 	HW_PLATFORM_SURF    = 1,
@@ -65,6 +85,7 @@ enum {
 	HW_PLATFORM_RCM	= 21,
 	HW_PLATFORM_STP = 23,
 	HW_PLATFORM_SBC = 24,
+	HW_PLATFORM_ADP = 25,
 	HW_PLATFORM_INVALID
 };
 
@@ -85,6 +106,7 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_DTV] = "DTV",
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
+	[HW_PLATFORM_ADP] = "ADP",
 };
 
 enum {
@@ -108,6 +130,22 @@ const char *qrd_hw_platform_subtype[] = {
 	[PLATFORM_SUBTYPE_SKUAB] = "SKUAB",
 	[PLATFORM_SUBTYPE_SKUG] = "SKUG",
 	[PLATFORM_SUBTYPE_QRD_INVALID] = "INVALID",
+};
+
+enum {
+	PLATFORM_SUBTYPE_MOJAVE_V1 = 0x0,
+	PLATFORM_SUBTYPE_MMX = 0x1,
+	PLATFORM_SUBTYPE_MOJAVE_FULL_V2 = 0x2,
+	PLATFORM_SUBTYPE_MOJAVE_BARE_V2 = 0x3,
+	PLATFORM_SUBTYPE_ADP_INVALID,
+};
+
+const char *adp_hw_platform_subtype[] = {
+	[PLATFORM_SUBTYPE_MOJAVE_V1] = "MOJAVE_V1",
+	[PLATFORM_SUBTYPE_MMX] = "MMX",
+	[PLATFORM_SUBTYPE_MOJAVE_FULL_V2] = "_MOJAVE_V2_FULL",
+	[PLATFORM_SUBTYPE_MOJAVE_BARE_V2] = "_MOJAVE_V2_BARE",
+	[PLATFORM_SUBTYPE_ADP_INVALID] = "INVALID",
 };
 
 enum {
@@ -509,24 +547,21 @@ static struct msm_soc_info cpu_of_id[] = {
 	[256] = {FSM_CPU_9010, "FSM9010"},
 	[257] = {FSM_CPU_9010, "FSM9010"},
 
-	/* 8952 ID */
-	[264] = {MSM_CPU_8952, "MSM8952"},
-	[289] = {MSM_CPU_8952, "APQ8952"},
+	/* Tellurium ID */
+	[264] = {MSM_CPU_TELLURIUM, "MSMTELLURIUM"},
 
 	/* 8996 IDs */
 	[246] = {MSM_CPU_8996, "MSM8996"},
-	[310] = {MSM_CPU_8996, "MSM8996"},
-	[311] = {MSM_CPU_8996, "APQ8096"},
 	[291] = {MSM_CPU_8996, "APQ8096"},
 	[305] = {MSM_CPU_8996, "MSM8996pro"},
+	[310] = {MSM_CPU_8996, "MSM8996"},
+	[311] = {MSM_CPU_8996, "APQ8096"},
 	[312] = {MSM_CPU_8996, "APQ8096pro"},
+	[315] = {MSM_CPU_8996, "MSM8996pro"},
+	[316] = {MSM_CPU_8996, "APQ8096pro"},
 
 	/* 8976 ID */
-	[278] = {MSM_CPU_8976, "MSM8976"},
-	[277] = {MSM_CPU_8976, "APQ8076"},
-	/* 8956 ID */
-	[266] = {MSM_CPU_8956, "MSM8956"},
-	[274] = {MSM_CPU_8956, "APQ8056"},
+	[266] = {MSM_CPU_8976, "MSM8976"},
 
 	/* 8929 IDs */
 	[268] = {MSM_CPU_8929, "MSM8929"},
@@ -536,7 +571,7 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* Cobalt IDs */
 	[292] = {MSM_CPU_8998, "MSM8998"},
-	[319] = {MSM_CPU_8998, "APQ8998"},
+	[319] = {MSM_CPU_8998, "APQ8098"},
 
 	/* Hamster ID */
 	[306] = {MSM_CPU_HAMSTER, "MSMHAMSTER"},
@@ -809,6 +844,14 @@ msm_get_platform_subtype(struct device *dev,
 		}
 		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 					qrd_hw_platform_subtype[hw_subtype]);
+	}
+	if (socinfo_get_platform_type() == HW_PLATFORM_ADP) {
+		if (hw_subtype >= PLATFORM_SUBTYPE_ADP_INVALID) {
+			pr_err("Invalid hardware platform sub type for adp found\n");
+			hw_subtype = PLATFORM_SUBTYPE_ADP_INVALID;
+		}
+		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+					adp_hw_platform_subtype[hw_subtype]);
 	} else {
 		if (hw_subtype >= PLATFORM_SUBTYPE_INVALID) {
 			pr_err("Invalid hardware platform subtype\n");
@@ -1219,25 +1262,17 @@ static void * __init setup_dummy_socinfo(void)
 		strlcpy(dummy_socinfo.build_id, "msm8992 - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msm8976()) {
-		dummy_socinfo.id = 278;
+		dummy_socinfo.id = 266;
 		strlcpy(dummy_socinfo.build_id, "msm8976 - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msm8956()) {
-		dummy_socinfo.id = 266;
-		strlcpy(dummy_socinfo.build_id, "msm8956 - ",
-			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msm8952()) {
+	} else if (early_machine_is_msmtellurium()) {
 		dummy_socinfo.id = 264;
-		strlcpy(dummy_socinfo.build_id, "msm8952 - ",
+		strlcpy(dummy_socinfo.build_id, "msmtellurium - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msm8996()) {
 		dummy_socinfo.id = 246;
 		strlcpy(dummy_socinfo.build_id, "msm8996 - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msm8996_auto()) {
-		dummy_socinfo.id = 310;
-		strlcpy(dummy_socinfo.build_id, "msm8996-auto - ",
-		sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msm8929()) {
 		dummy_socinfo.id = 268;
 		strlcpy(dummy_socinfo.build_id, "msm8929 - ",
@@ -1274,9 +1309,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 327;
 		strlcpy(dummy_socinfo.build_id, "sda630 - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_apq8998()) {
+	} else if (early_machine_is_apq8098()) {
 		dummy_socinfo.id = 319;
-		strlcpy(dummy_socinfo.build_id, "apq8998 - ",
+		strlcpy(dummy_socinfo.build_id, "apq8098 - ",
 			sizeof(dummy_socinfo.build_id));
 	}
 
@@ -1544,6 +1579,34 @@ static void socinfo_select_format(void)
 	}
 }
 
+#ifdef CONFIG_RAMDUMP_TAGS
+/* Extracts information from QC:s socinfo to get
+ * information about the hardware revisions of main soc
+ */
+static void add_socinfo_tags(void)
+{
+	uint32_t res;
+	char buf[64];
+	char *str;
+
+	RDT_ADD_UINT(read_cpuid_id, "cpuid_id");
+	RDT_ADD_UINT(socinfo_get_platform_version, "socinfo_platform_version");
+	RDT_ADD_UINT(socinfo_get_platform_subtype, "socinfo_platform_subtype");
+	RDT_ADD_UINT(socinfo_get_platform_type, "socinfo_platform_type");
+	RDT_ADD_UINT(socinfo_get_raw_id, "socinfo_raw_id");
+	RDT_ADD_UINT(socinfo_get_id, "socinfo_id");
+
+	res = socinfo_get_version();
+	snprintf(buf, sizeof(buf), "%u.%u", SOCINFO_VERSION_MAJOR(res),
+						SOCINFO_VERSION_MINOR(res));
+	rdtags_add_tag("socinfo_version", buf, strnlen(buf, sizeof(buf)));
+
+	str = socinfo_get_build_id();
+	if (str)
+		rdtags_add_tag("socinfo_build_id", str, strlen(str));
+}
+#endif
+
 int __init socinfo_init(void)
 {
 	static bool socinfo_init_done;
@@ -1572,6 +1635,9 @@ int __init socinfo_init(void)
 	socinfo_print();
 	arch_read_hardware_id = msm_read_hardware_id;
 	socinfo_init_done = true;
+#ifdef CONFIG_RAMDUMP_TAGS
+	add_socinfo_tags();
+#endif
 
 	return 0;
 }

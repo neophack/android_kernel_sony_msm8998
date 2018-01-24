@@ -227,7 +227,7 @@ static int qup_i2c_wait_writeready(struct qup_i2c_dev *qup)
 	u32 opflags;
 	u32 status;
 
-	timeout = jiffies + msecs_to_jiffies(1000);
+	timeout = jiffies + HZ;
 
 	for (;;) {
 		opflags = readl(qup->base + QUP_OPERATIONAL);
@@ -331,7 +331,7 @@ static int qup_i2c_write_one(struct qup_i2c_dev *qup, struct i2c_msg *msg)
 		if (ret)
 			goto err;
 
-		left = wait_for_completion_timeout(&qup->xfer, msecs_to_jiffies(1000));
+		left = wait_for_completion_timeout(&qup->xfer, HZ);
 		if (!left) {
 			writel(1, qup->base + QUP_SW_RESET);
 			ret = -ETIMEDOUT;
@@ -436,7 +436,7 @@ static int qup_i2c_read_one(struct qup_i2c_dev *qup, struct i2c_msg *msg)
 		goto err;
 
 	do {
-		left = wait_for_completion_timeout(&qup->xfer, msecs_to_jiffies(1000));
+		left = wait_for_completion_timeout(&qup->xfer, HZ);
 		if (!left) {
 			writel(1, qup->base + QUP_SW_RESET);
 			ret = -ETIMEDOUT;
@@ -727,7 +727,8 @@ static int qup_i2c_pm_resume_runtime(struct device *device)
 #ifdef CONFIG_PM_SLEEP
 static int qup_i2c_suspend(struct device *device)
 {
-	qup_i2c_pm_suspend_runtime(device);
+	if (!pm_runtime_suspended(device))
+		return qup_i2c_pm_suspend_runtime(device);
 	return 0;
 }
 

@@ -23,7 +23,8 @@ static inline void msm_isp_stats_cfg_wm_scratch(struct vfe_device *vfe_dev,
 {
 	vfe_dev->hw_info->vfe_ops.stats_ops.update_ping_pong_addr(
 		vfe_dev, stream_info,
-		pingpong_status, vfe_dev->buf_mgr->scratch_buf_stats_addr);
+		pingpong_status, vfe_dev->buf_mgr->scratch_buf_stats_addr,
+		SZ_32M);
 }
 
 static inline void msm_isp_stats_cfg_stream_scratch(
@@ -123,7 +124,8 @@ static int msm_isp_stats_cfg_ping_pong_address(
 		vfe_dev->hw_info->vfe_ops.stats_ops.update_ping_pong_addr(
 			vfe_dev, stream_info, pingpong_status,
 			buf->mapped_info[0].paddr +
-			stream_info->buffer_offset[k]);
+			stream_info->buffer_offset[k],
+			buf->mapped_info[0].len);
 	}
 	stream_info->buf[pingpong_bit] = buf;
 	buf->pingpong_bit = pingpong_bit;
@@ -226,9 +228,14 @@ static int32_t msm_isp_stats_buf_divert(struct vfe_device *vfe_dev,
 		done_buf->buf_idx;
 
 	stats_event->pd_stats_idx = 0xF;
-	if (stream_info->stats_type == MSM_ISP_STATS_BF)
-		stats_event->pd_stats_idx = vfe_dev->pd_buf_idx;
-
+	if (stream_info->stats_type == MSM_ISP_STATS_BF) {
+		spin_lock_irqsave(&vfe_dev->common_data->
+			common_dev_data_lock, flags);
+		stats_event->pd_stats_idx = vfe_dev->common_data->pd_buf_idx;
+		vfe_dev->common_data->pd_buf_idx = 0xF;
+		spin_unlock_irqrestore(&vfe_dev->common_data->
+			common_dev_data_lock, flags);
+	}
 	if (comp_stats_type_mask == NULL) {
 		stats_event->stats_mask =
 			1 << stream_info->stats_type;
@@ -260,7 +267,9 @@ static int32_t msm_isp_stats_configure(struct vfe_device *vfe_dev,
 	int result = 0;
 
 	memset(&buf_event, 0, sizeof(struct msm_isp_event_data));
-	buf_event.timestamp = ts->buf_time;
+	buf_event.timestamp = ts->event_time;
+	buf_event.mono_timestamp = ts->buf_time;
+
 	buf_event.frame_id = vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
 	pingpong_status = vfe_dev->hw_info->
 		vfe_ops.stats_ops.get_pingpong_status(vfe_dev);
@@ -542,10 +551,10 @@ int msm_isp_release_stats_stream(struct vfe_device *vfe_dev, void *arg)
 		stream_info->buffer_offset[i] = stream_info->buffer_offset[k];
 	}
 
-	stream_info->num_isp--;
 	stream_info->vfe_dev[stream_info->num_isp] = 0;
 	stream_info->stream_handle[stream_info->num_isp] = 0;
 	stream_info->buffer_offset[stream_info->num_isp] = 0;
+	stream_info->num_isp--;
 	stream_info->vfe_mask &= ~(1 << vfe_dev->pdev->id);
 	if (stream_info->num_isp == 0)
 		stream_info->state = STATS_AVAILABLE;

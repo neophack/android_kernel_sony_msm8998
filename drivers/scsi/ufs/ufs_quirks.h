@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef _UFS_QUIRKS_H_
 #define _UFS_QUIRKS_H_
@@ -19,8 +24,10 @@
 
 #define UFS_ANY_VENDOR -1
 #define UFS_ANY_MODEL  "ANY_MODEL"
+#define UFS_ANY_VER    "ANY_VER"
 
 #define MAX_MODEL_LEN 16
+#define MAX_REVISION_LEN 8
 
 #define UFS_VENDOR_TOSHIBA     0x198
 #define UFS_VENDOR_SAMSUNG     0x1CE
@@ -29,11 +36,6 @@
 /* UFS TOSHIBA MODELS */
 #define UFS_MODEL_TOSHIBA_32GB "THGLF2G8D4KBADR"
 #define UFS_MODEL_TOSHIBA_64GB "THGLF2G9D8KBADG"
-
-#ifdef CONFIG_ARCH_SONY_YOSHINO
-#define UFS_ANY_VER    "ANY_VER"
-
-#define MAX_REVISION_LEN 8
 
 /* UFS SAMSUNG MODELS */
 #define UFS_MODEL_SAMSUNG_64GB "KLUCG4J1"
@@ -45,7 +47,6 @@
 #define UFS_REVISION_HYNIX     "D001"
 
 #define UFS_PURGE_SPEC_VER     0x210
-#endif
 
 /**
  * ufs_card_info - ufs device details
@@ -54,11 +55,9 @@
  */
 struct ufs_card_info {
 	u16 wmanufacturerid;
-	char *model;
-#ifdef CONFIG_ARCH_SONY_YOSHINO
 	u16 specver;
+	char *model;
 	char *revision;
-#endif
 };
 
 /**
@@ -73,7 +72,6 @@ struct ufs_card_fix {
 
 #define END_FIX { { 0 } , 0 }
 
-#ifdef CONFIG_ARCH_SONY_YOSHINO
 /* add specific device quirk */
 #define UFS_FIX(_vendor, _model, _quirk) \
 		{						  \
@@ -87,18 +85,10 @@ struct ufs_card_fix {
 		{						  \
 				.card.wmanufacturerid = (_vendor),\
 				.card.model = (_model),		  \
-				.card.revision = (_revision),	  \
+				.card.revision = (_revision),		\
 				.quirk = (_quirk),		  \
 		}
-#else
-/* add specific device quirk */
-#define UFS_FIX(_vendor, _model, _quirk) \
-		{						  \
-				.card.wmanufacturerid = (_vendor),\
-				.card.model = (_model),		  \
-				.quirk = (_quirk),		  \
-		}
-#endif
+
 /*
  * If UFS device is having issue in processing LCC (Line Control
  * Command) coming from UFS host controller then enable this quirk.
@@ -178,10 +168,15 @@ struct ufs_card_fix {
  */
 #define UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME	(1 << 7)
 
-#ifdef CONFIG_ARCH_SONY_YOSHINO
+/*
+ * Some UFS devices may stop responding after switching from HS-G1 to HS-G3.
+ * Also, it is found that these devices work fine if we do 2 steps switch:
+ * HS-G1 to HS-G2 followed by HS-G2 to HS-G3. Enabling this quirk for such
+ * device would apply this 2 steps gear switch workaround.
+ */
+#define UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH (1 << 8)
 #define UFS_DEVICE_QUIRK_EXTEND_SYNC_LENGTH	(1 << 23)
 #define UFS_DEVICE_QUIRK_NO_PURGE	(1 << 24)
-#endif
 
 struct ufs_hba;
 void ufs_advertise_fixup_device(struct ufs_hba *hba);

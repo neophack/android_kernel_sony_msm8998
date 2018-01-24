@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/module.h>
 #include <linux/string.h>
@@ -39,8 +44,13 @@
 #include <asm/uaccess.h>
 #include <asm/setup.h>
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
+#define CREATE_TRACE_POINTS
+#include <trace/events/trace_msm_pil_event.h>
 
 #include "peripheral-loader.h"
+#ifdef CONFIG_RAMDUMP_MEMDESC
+#include <linux/ramdump_mem_desc.h>
+#endif
 
 #define pil_err(desc, fmt, ...)						\
 	dev_err(desc->dev, "%s: " fmt, desc->name, ##__VA_ARGS__)
@@ -66,6 +76,7 @@ static int proxy_timeout_ms = -1;
 module_param(proxy_timeout_ms, int, S_IRUGO | S_IWUSR);
 
 static bool disable_timeouts;
+static const char firmware_error_msg[] = "firmware_error\n";
 /**
  * struct pil_mdt - Representation of <name>.mdt file in memory
  * @hdr: ELF32 header
@@ -186,8 +197,7 @@ EXPORT_SYMBOL(pil_do_ramdump);
 int pil_assign_mem_to_subsys(struct pil_desc *desc, phys_addr_t addr,
 							size_t size)
 {
-	int ret = 0;
-#ifndef CONFIG_MSM_PIL_LEGACY
+	int ret;
 	int srcVM[1] = {VMID_HLOS};
 	int destVM[1] = {desc->subsys_vmid};
 	int destVMperm[1] = {PERM_READ | PERM_WRITE};
@@ -196,7 +206,6 @@ int pil_assign_mem_to_subsys(struct pil_desc *desc, phys_addr_t addr,
 	if (ret)
 		pil_err(desc, "%s: failed for %pa address of size %zx - subsys VMid %d rc:%d\n",
 				__func__, &addr, size, desc->subsys_vmid, ret);
-#endif
 	return ret;
 }
 EXPORT_SYMBOL(pil_assign_mem_to_subsys);
@@ -204,8 +213,7 @@ EXPORT_SYMBOL(pil_assign_mem_to_subsys);
 int pil_assign_mem_to_linux(struct pil_desc *desc, phys_addr_t addr,
 							size_t size)
 {
-	int ret = 0;
-#ifndef CONFIG_MSM_PIL_LEGACY
+	int ret;
 	int srcVM[1] = {desc->subsys_vmid};
 	int destVM[1] = {VMID_HLOS};
 	int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
@@ -214,7 +222,7 @@ int pil_assign_mem_to_linux(struct pil_desc *desc, phys_addr_t addr,
 	if (ret)
 		panic("%s: failed for %pa address of size %zx - subsys VMid %d rc:%d\n",
 				__func__, &addr, size, desc->subsys_vmid, ret);
-#endif
+
 	return ret;
 }
 EXPORT_SYMBOL(pil_assign_mem_to_linux);
@@ -222,8 +230,7 @@ EXPORT_SYMBOL(pil_assign_mem_to_linux);
 int pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
 						phys_addr_t addr, size_t size)
 {
-	int ret = 0;
-#ifndef CONFIG_MSM_PIL_LEGACY
+	int ret;
 	int srcVM[1] = {VMID_HLOS};
 	int destVM[2] = {VMID_HLOS, desc->subsys_vmid};
 	int destVMperm[2] = {PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE};
@@ -232,7 +239,6 @@ int pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
 	if (ret)
 		pil_err(desc, "%s: failed for %pa address of size %zx - subsys VMid %d rc:%d\n",
 				__func__, &addr, size, desc->subsys_vmid, ret);
-#endif
 
 	return ret;
 }
@@ -241,8 +247,7 @@ EXPORT_SYMBOL(pil_assign_mem_to_subsys_and_linux);
 int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr, size_t size,
 						int VMid)
 {
-	int ret = 0;
-#ifndef CONFIG_MSM_PIL_LEGACY
+	int ret;
 	int srcVM[2] = {VMID_HLOS, desc->subsys_vmid};
 	int destVM[1] = {VMid};
 	int destVMperm[1] = {PERM_READ | PERM_WRITE};
@@ -254,7 +259,6 @@ int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr, size_t size,
 	if (ret)
 		panic("%s: failed for %pa address of size %zx - subsys VMid %d. Fatal error.\n",
 				__func__, &addr, size, desc->subsys_vmid);
-#endif
 
 	return ret;
 }
@@ -680,12 +684,14 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		if (ret < 0) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big(rc:%d)\n",
 				fw_name, ret);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
 			return ret;
 		}
 
 		if (ret != seg->filesz) {
 			pil_err(desc, "Blob size %u doesn't match %lu\n",
 					ret, seg->filesz);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
 			return -EPERM;
 		}
 		ret = 0;
@@ -714,9 +720,11 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 
 	if (desc->ops->verify_blob) {
 		ret = desc->ops->verify_blob(desc, seg->paddr, seg->sz);
-		if (ret)
+		if (ret) {
 			pil_err(desc, "Blob%u failed verification(rc:%d)\n",
 								num, ret);
+			subsys_set_error(desc->subsys_dev, firmware_error_msg);
+		}
 	}
 
 	return ret;
@@ -760,6 +768,43 @@ static int pil_parse_devicetree(struct pil_desc *desc)
 	return 0;
 }
 
+#ifdef CONFIG_RAMDUMP_MEMDESC
+/* Tag the subsystem information in ramdump memory descriptors */
+static void get_mem_desc_subsys_name(const struct pil_priv *priv,
+					struct mem_desc *mem_desc_subsys)
+{
+	if (!strncmp(priv->desc->name, "modem", MEM_DESC_NAME_SIZE))
+		strlcpy(mem_desc_subsys->name, "amsscore", MEM_DESC_NAME_SIZE);
+	else {
+		snprintf(mem_desc_subsys->name, MEM_DESC_NAME_SIZE, "%score",
+				priv->desc->name);
+	}
+}
+
+static void add_mem_desc_subsys_info(const struct pil_priv *priv)
+{
+	struct mem_desc mem_desc_subsys;
+
+	mem_desc_subsys.phys_addr = priv->region_start;
+	mem_desc_subsys.size = priv->region_end - priv->region_start;
+	mem_desc_subsys.flags = MEM_DESC_CORE;
+	get_mem_desc_subsys_name(priv, &mem_desc_subsys);
+	ramdump_add_mem_desc(&mem_desc_subsys);
+}
+
+static void remove_mem_desc_subsys_info(const struct pil_priv *priv)
+{
+	struct mem_desc mem_desc_subsys;
+
+	mem_desc_subsys.phys_addr = priv->region_start;
+	mem_desc_subsys.size = priv->region_end - priv->region_start;
+	mem_desc_subsys.flags = MEM_DESC_CORE;
+	get_mem_desc_subsys_name(priv, &mem_desc_subsys);
+	ramdump_remove_mem_desc(&mem_desc_subsys);
+}
+
+#endif
+
 /* Synchronize request_firmware() with suspend */
 static DECLARE_RWSEM(pil_pm_rwsem);
 
@@ -797,6 +842,7 @@ int pil_boot(struct pil_desc *desc)
 
 	if (fw->size < sizeof(*ehdr)) {
 		pil_err(desc, "Not big enough to be an elf header\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
@@ -806,18 +852,21 @@ int pil_boot(struct pil_desc *desc)
 
 	if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG)) {
 		pil_err(desc, "Not an elf header\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
 
 	if (ehdr->e_phnum == 0) {
 		pil_err(desc, "No loadable segments\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
 	if (sizeof(struct elf32_phdr) * ehdr->e_phnum +
 	    sizeof(struct elf32_hdr) > fw->size) {
 		pil_err(desc, "Program headers not within mdt\n");
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		ret = -EIO;
 		goto release_fw;
 	}
@@ -833,13 +882,16 @@ int pil_boot(struct pil_desc *desc)
 		goto release_fw;
 	}
 
+	trace_pil_event("before_init_image", desc);
 	if (desc->ops->init_image)
 		ret = desc->ops->init_image(desc, fw->data, fw->size);
 	if (ret) {
 		pil_err(desc, "Initializing image failed(rc:%d)\n", ret);
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		goto err_boot;
 	}
 
+	trace_pil_event("before_mem_setup", desc);
 	if (desc->ops->mem_setup)
 		ret = desc->ops->mem_setup(desc, priv->region_start,
 				priv->region_end - priv->region_start);
@@ -855,6 +907,7 @@ int pil_boot(struct pil_desc *desc)
 		 * Also for secure boot devices, modem memory has to be released
 		 * after MBA is booted
 		 */
+		trace_pil_event("before_assign_mem", desc);
 		if (desc->modem_ssr) {
 			ret = pil_assign_mem_to_linux(desc, priv->region_start,
 				(priv->region_end - priv->region_start));
@@ -873,6 +926,11 @@ int pil_boot(struct pil_desc *desc)
 		hyp_assign = true;
 	}
 
+#ifdef CONFIG_RAMDUMP_MEMDESC
+	add_mem_desc_subsys_info(priv);
+#endif
+
+	trace_pil_event("before_load_seg", desc);
 	list_for_each_entry(seg, &desc->priv->segs, list) {
 		ret = pil_load_seg(desc, seg);
 		if (ret)
@@ -880,6 +938,7 @@ int pil_boot(struct pil_desc *desc)
 	}
 
 	if (desc->subsys_vmid > 0) {
+		trace_pil_event("before_reclaim_mem", desc);
 		ret =  pil_reclaim_mem(desc, priv->region_start,
 				(priv->region_end - priv->region_start),
 				desc->subsys_vmid);
@@ -891,11 +950,14 @@ int pil_boot(struct pil_desc *desc)
 		hyp_assign = false;
 	}
 
+	trace_pil_event("before_auth_reset", desc);
 	ret = desc->ops->auth_and_reset(desc);
 	if (ret) {
 		pil_err(desc, "Failed to bring out of reset(rc:%d)\n", ret);
+		subsys_set_error(desc->subsys_dev, firmware_error_msg);
 		goto err_auth_and_reset;
 	}
+	trace_pil_event("reset_done", desc);
 	pil_info(desc, "Brought out of reset\n");
 	desc->modem_ssr = false;
 err_auth_and_reset:
@@ -926,6 +988,9 @@ out:
 			}
 			if (desc->clear_fw_region && priv->region_start)
 				pil_clear_segment(desc);
+#ifdef CONFIG_RAMDUMP_MEMDESC
+			remove_mem_desc_subsys_info(priv);
+#endif
 			dma_free_attrs(desc->dev, priv->region_size,
 					priv->region, priv->region_start,
 					&desc->attrs);
@@ -961,6 +1026,10 @@ void pil_shutdown(struct pil_desc *desc)
 	else
 		flush_delayed_work(&priv->proxy);
 	desc->modem_ssr = true;
+
+#ifdef CONFIG_RAMDUMP_MEMDESC
+	remove_mem_desc_subsys_info(priv);
+#endif
 }
 EXPORT_SYMBOL(pil_shutdown);
 

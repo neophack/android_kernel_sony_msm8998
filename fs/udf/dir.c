@@ -167,9 +167,8 @@ static int udf_readdir(struct file *file, struct dir_context *ctx)
 			continue;
 		}
 
-		flen = udf_get_filename(dir->i_sb, nameptr, lfi, fname,
-					UDF_NAME_LEN);
-		if (!flen)
+		flen = udf_get_filename(sb, nameptr, lfi, fname, UDF_NAME_LEN);
+		if (flen < 0)
 			continue;
 
 		tloc = lelb_to_cpu(cfi.icb.extLocation);

@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef MDSS_PANEL_H
 #define MDSS_PANEL_H
@@ -308,9 +313,6 @@ enum mdss_intf_events {
 	MDSS_EVENT_DSI_TIMING_DB_CTRL,
 	MDSS_EVENT_AVR_MODE,
 	MDSS_EVENT_REGISTER_CLAMP_HANDLER,
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-	MDSS_EVENT_DISP_ON,
-#endif	/* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 	MDSS_EVENT_MAX,
 };
 
@@ -409,8 +411,9 @@ struct lcd_panel_info {
 	/* Pad height */
 	u32 yres_pad;
 	u32 frame_rate;
+	u32 h_polarity;
+	u32 v_polarity;
 };
-
 
 /* DSI PHY configuration */
 struct mdss_dsi_phy_ctrl {
@@ -522,6 +525,9 @@ struct mipi_panel_info {
 	char dma_trigger;
 	/* Dynamic Switch Support */
 	enum dynamic_mode_switch dms_mode;
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	bool switch_mode_pending;
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 	u32 pixel_packing;
 	u32 dsi_pclk_rate;
@@ -536,11 +542,8 @@ struct mipi_panel_info {
 	char lp11_init;
 	u32  init_delay;
 	u32  post_init_delay;
-
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-	int input_fpks;
-	bool switch_mode_pending;
-#endif
+	u32  num_of_sublinks;
+	u32  lanes_per_sublink;
 };
 
 struct edp_panel_info {
@@ -855,6 +858,7 @@ struct mdss_panel_info {
 	bool is_lpm_mode;
 	bool is_split_display; /* two DSIs in one display, pp split or not */
 	bool use_pingpong_split;
+	bool split_link_enabled;
 
 	/*
 	 * index[0] = left layer mixer, value of 0 not valid
@@ -936,13 +940,7 @@ struct mdss_panel_info {
 #ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
 	const char *panel_id_name;
 	int dsi_master;
-	int disp_on_in_hs;
-	int wait_time_before_on_cmd;
-
-	/* physical size in mm */
-	__u32 width;
-	__u32 height;
-#endif
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 };
 
 struct mdss_panel_timing {
@@ -977,6 +975,10 @@ struct mdss_panel_timing {
 
 	struct mdss_mdp_pp_tear_check te;
 	struct mdss_panel_roi_alignment roi_alignment;
+
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	bool koff_thshold_enable;
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 };
 
 struct mdss_panel_data {
@@ -987,18 +989,7 @@ struct mdss_panel_data {
 
 #ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
 	struct platform_device *panel_pdev;
-
-	int (*intf_ready) (struct mdss_panel_data *pdata);
-	void (*crash_counter_reset) (void);
-	void (*blackscreen_off) (struct mdss_panel_data *pdata);
-	void (*blackscreen_det) (struct mdss_panel_data *pdata);
-	void (*fff_time_update) (struct mdss_panel_data *pdata);
-
-	int (*detect) (struct mdss_panel_data *pdata);
-	int (*update_panel) (struct mdss_panel_data *pdata);
-
-	bool resume_started;
-#endif
+#endif /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
 	/**
 	 * event_handler() - callback handler for MDP core events
@@ -1028,6 +1019,9 @@ struct mdss_panel_data {
 	 * are still on; panel will recover after unblank
 	 */
 	bool panel_disable_mode;
+
+	int panel_te_gpio;
+	struct completion te_done;
 };
 
 struct mdss_panel_debugfs_info {
@@ -1322,17 +1316,6 @@ struct mdss_panel_cfg *mdss_panel_intf_type(int intf_val);
  */
 bool mdss_is_ready(void);
 int mdss_rect_cmp(struct mdss_rect *rect1, struct mdss_rect *rect2);
-
-struct msm_fb_data_type;
-#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL)
-void mipi_dsi_panel_create_debugfs(struct msm_fb_data_type *mfd);
-bool mdss_dsi_panel_flip_ud(void);
-#else
-static inline void mipi_dsi_panel_create_debugfs(struct msm_fb_data_type *mfd)
-{
-	/* empty */
-}
-#endif
 
 /**
  * mdss_panel_override_te_params() - overrides TE params to enable SW TE

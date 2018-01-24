@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -150,7 +150,7 @@ static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
 {
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	int rc, ret;
+	int ret;
 
 	/*
 	 * iommu dynamic attach for following conditions.
@@ -167,26 +167,44 @@ static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
 		return -EPERM;
 	}
 
-	rc = mdss_smmu_map(MDSS_IOMMU_DOMAIN_UNSECURE,
+	/*
+	 * Putting handoff pending to false to ensure smmu attach happens
+	 * with early flag attribute
+	 */
+	mdata->handoff_pending = false;
+
+	ret = mdss_smmu_set_attribute(MDSS_IOMMU_DOMAIN_UNSECURE, EARLY_MAP, 1);
+	if (ret) {
+		pr_err("mdss set attribute failed for early map\n");
+		goto end;
+	}
+
+	ret = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(ret)) {
+		pr_err("mdss iommu attach failed\n");
+		goto end;
+	}
+
+	ret = mdss_smmu_map(MDSS_IOMMU_DOMAIN_UNSECURE,
 				mdp5_data->splash_mem_addr,
 				mdp5_data->splash_mem_addr,
 				mdp5_data->splash_mem_size,
 				IOMMU_READ | IOMMU_NOEXEC);
-	if (rc) {
-		pr_debug("iommu memory mapping failed rc=%d\n", rc);
+	if (ret) {
+		pr_err("iommu memory mapping failed ret=%d\n", ret);
 	} else {
-		ret = mdss_iommu_ctrl(1);
-		if (IS_ERR_VALUE(ret)) {
-			pr_err("mdss iommu attach failed\n");
-			mdss_smmu_unmap(MDSS_IOMMU_DOMAIN_UNSECURE,
-					mdp5_data->splash_mem_addr,
-					mdp5_data->splash_mem_size);
-		} else {
-			mfd->splash_info.iommu_dynamic_attached = true;
-		}
+		pr_debug("iommu map passed for PA=VA\n");
+		mfd->splash_info.iommu_dynamic_attached = true;
 	}
 
-	return rc;
+	ret = mdss_smmu_set_attribute(MDSS_IOMMU_DOMAIN_UNSECURE, EARLY_MAP, 0);
+	if (ret)
+		pr_err("mdss reset attribute failed for early map\n");
+
+end:
+	mdata->handoff_pending = true;
+
+	return ret;
 }
 
 static void mdss_mdp_splash_unmap_splash_mem(struct msm_fb_data_type *mfd)
@@ -194,12 +212,10 @@ static void mdss_mdp_splash_unmap_splash_mem(struct msm_fb_data_type *mfd)
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 
 	if (mfd->splash_info.iommu_dynamic_attached) {
-
 		mdss_smmu_unmap(MDSS_IOMMU_DOMAIN_UNSECURE,
 				mdp5_data->splash_mem_addr,
 				mdp5_data->splash_mem_size);
 		mdss_iommu_ctrl(0);
-
 		mfd->splash_info.iommu_dynamic_attached = false;
 	}
 }
@@ -218,13 +234,6 @@ void mdss_mdp_release_splash_pipe(struct msm_fb_data_type *mfd)
 	if (sinfo->pipe_ndx[1] != INVALID_PIPE_INDEX)
 		mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[1]);
 	sinfo->splash_pipe_allocated = false;
-
-	/*
-	 * Once the splash pipe is released, reset the splash flag which
-	 * is being stored in var.reserved[3].
-	 */
-	mfd->fbi->var.reserved[3] = mfd->panel_info->cont_splash_enabled |
-					mfd->splash_info.splash_pipe_allocated;
 }
 
 /*
@@ -313,13 +322,6 @@ int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 	}
 
 	mdss_mdp_ctl_splash_finish(ctl, mdp5_data->handoff);
-
-	/*
-	 * Once the splash cleanup is done, reset the splash flag which
-	 * is being stored in var.reserved[3].
-	 */
-	mfd->fbi->var.reserved[3] = mfd->panel_info->cont_splash_enabled |
-					mfd->splash_info.splash_pipe_allocated;
 
 	if (mdp5_data->splash_mem_addr &&
 		!mfd->splash_info.iommu_dynamic_attached) {
@@ -545,16 +547,8 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	rc = mdss_mdp_splash_kickoff(mfd, &src_rect, &dest_rect);
 	if (rc)
 		pr_err("splash image display failed\n");
-	else {
+	else
 		sinfo->splash_pipe_allocated = true;
-		/*
-		 * Once the splash pipe is allocated, set the splash flag which
-		 * is being stored in var.reserved[3].
-		 */
-		mfd->fbi->var.reserved[3] =
-					mfd->panel_info->cont_splash_enabled |
-					mfd->splash_info.splash_pipe_allocated;
-	}
 end:
 	return rc;
 }

@@ -15,6 +15,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -392,11 +397,11 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 
 	if (unlikely(timeit)) {
 		ts_end = ktime_get();
-		if (ktime_to_ns(par->update_time))
+		if (!ktime_to_ns(par->update_time))
 			par->update_time = ts_start;
 
-		par->update_time = ts_start;
 		fps = ktime_us_delta(ts_start, par->update_time);
+		par->update_time = ts_start;
 		fps = fps ? 1000000 / fps : 0;
 
 		throughput = ktime_us_delta(ts_end, ts_start);

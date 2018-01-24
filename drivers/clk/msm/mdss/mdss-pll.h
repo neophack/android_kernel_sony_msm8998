@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,17 +37,13 @@ enum {
 	MDSS_HDMI_PLL_8996_V2,
 	MDSS_HDMI_PLL_8996_V3,
 	MDSS_HDMI_PLL_8996_V3_1_8,
-	MDSS_HDMI_PLL_8998,
-	MDSS_DSI_PLL_HPM,
-	MDSS_EDP_PLL,
-	MDSS_HDMI_PLL,
+	MDSS_HDMI_PLL_8998_3_3,
+	MDSS_HDMI_PLL_8998_1_8,
 	MDSS_UNKNOWN_PLL,
 };
 
 enum {
 	MDSS_PLL_TARGET_8996,
-	MDSS_PLL_TARGET_8974,
-	MDSS_PLL_TARGET_8976,
 };
 
 #define DFPS_MAX_NUM_OF_FRAME_RATES 20
@@ -127,12 +123,6 @@ struct mdss_pll_resources {
 	 * status for them to turn on/off after set rate success.
 	 */
 	bool		pll_on;
-
-	/*
-	 * Certain plls' have to change the vco freq range to support
-	 * 90 phase difference between bit and byte clock frequency.
-	 */
-	bool		pll_en_90_phase;
 
 	/*
 	 * handoff_status is true of pll is already enabled by bootloader with

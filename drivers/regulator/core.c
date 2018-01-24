@@ -3,7 +3,6 @@
  *
  * Copyright 2007, 2008 Wolfson Microelectronics PLC.
  * Copyright 2008 SlimLogic Ltd.
- * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * Author: Liam Girdwood <lrg@slimlogic.co.uk>
  *
@@ -12,6 +11,11 @@
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
  *
+ */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2013 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
  */
 
 #include <linux/kernel.h>
@@ -135,19 +139,6 @@ static bool have_full_constraints(void)
 	return has_full_constraints || of_have_populated_dt();
 }
 
-static bool regulator_ops_is_valid(struct regulator_dev *rdev, int ops)
-{
-	if (!rdev->constraints) {
-		rdev_err(rdev, "no constraints\n");
-		return false;
-	}
-
-	if (rdev->constraints->valid_ops_mask & ops)
-		return true;
-
-	return false;
-}
-
 static inline struct regulator_dev *rdev_get_supply(struct regulator_dev *rdev)
 {
 	if (rdev && rdev->supply)
@@ -214,13 +205,28 @@ static struct device_node *of_get_regulator(struct device *dev, const char *supp
 	return regnode;
 }
 
+static int _regulator_can_change_status(struct regulator_dev *rdev)
+{
+	if (!rdev->constraints)
+		return 0;
+
+	if (rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_STATUS)
+		return 1;
+	else
+		return 0;
+}
+
 /* Platform voltage constraint check */
 static int regulator_check_voltage(struct regulator_dev *rdev,
 				   int *min_uV, int *max_uV)
 {
 	BUG_ON(*min_uV > *max_uV);
 
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_VOLTAGE)) {
+	if (!rdev->constraints) {
+		rdev_err(rdev, "no constraints\n");
+		return -ENODEV;
+	}
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_VOLTAGE)) {
 		rdev_err(rdev, "voltage operation not allowed\n");
 		return -EPERM;
 	}
@@ -294,7 +300,11 @@ static int regulator_check_current_limit(struct regulator_dev *rdev,
 {
 	BUG_ON(*min_uA > *max_uA);
 
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_CURRENT)) {
+	if (!rdev->constraints) {
+		rdev_err(rdev, "no constraints\n");
+		return -ENODEV;
+	}
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_CURRENT)) {
 		rdev_err(rdev, "current operation not allowed\n");
 		return -EPERM;
 	}
@@ -327,7 +337,11 @@ static int regulator_mode_constrain(struct regulator_dev *rdev, int *mode)
 		return -EINVAL;
 	}
 
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_MODE)) {
+	if (!rdev->constraints) {
+		rdev_err(rdev, "no constraints\n");
+		return -ENODEV;
+	}
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_MODE)) {
 		rdev_err(rdev, "mode operation not allowed\n");
 		return -EPERM;
 	}
@@ -342,6 +356,20 @@ static int regulator_mode_constrain(struct regulator_dev *rdev, int *mode)
 	}
 
 	return -EINVAL;
+}
+
+/* dynamic regulator mode switching constraint check */
+static int regulator_check_drms(struct regulator_dev *rdev)
+{
+	if (!rdev->constraints) {
+		rdev_dbg(rdev, "no constraints\n");
+		return -ENODEV;
+	}
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_DRMS)) {
+		rdev_dbg(rdev, "drms operation not allowed\n");
+		return -EPERM;
+	}
+	return 0;
 }
 
 static ssize_t regulator_uV_show(struct device *dev,
@@ -689,7 +717,8 @@ static int drms_uA_update(struct regulator_dev *rdev)
 	 * first check to see if we can set modes at all, otherwise just
 	 * tell the consumer everything is OK.
 	 */
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_DRMS))
+	err = regulator_check_drms(rdev);
+	if (err < 0)
 		return 0;
 
 	if (!rdev->desc->ops->get_optimum_mode &&
@@ -897,7 +926,7 @@ static void print_constraints(struct regulator_dev *rdev)
 	rdev_dbg(rdev, "%s\n", buf);
 
 	if ((constraints->min_uV != constraints->max_uV) &&
-	    !regulator_ops_is_valid(rdev, REGULATOR_CHANGE_VOLTAGE))
+	    !(constraints->valid_ops_mask & REGULATOR_CHANGE_VOLTAGE))
 		rdev_warn(rdev,
 			  "Voltage range but no REGULATOR_CHANGE_VOLTAGE\n");
 }
@@ -1321,7 +1350,7 @@ static struct regulator *create_regulator(struct regulator_dev *rdev,
 	 * it is then we don't need to do nearly so much work for
 	 * enable/disable calls.
 	 */
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_STATUS) &&
+	if (!_regulator_can_change_status(rdev) &&
 	    _regulator_is_enabled(rdev))
 		regulator->always_on = true;
 
@@ -2089,15 +2118,15 @@ static int _regulator_enable(struct regulator_dev *rdev)
 	lockdep_assert_held_once(&rdev->mutex);
 
 	/* check voltage and requested load before enabling */
-	if (regulator_ops_is_valid(rdev, REGULATOR_CHANGE_DRMS))
+	if (rdev->constraints &&
+	    (rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_DRMS))
 		drms_uA_update(rdev);
 
 	if (rdev->use_count == 0) {
 		/* The regulator may on if it's not switchable or left on */
 		ret = _regulator_is_enabled(rdev);
 		if (ret == -EINVAL || ret == 0) {
-			if (!regulator_ops_is_valid(rdev,
-					REGULATOR_CHANGE_STATUS))
+			if (!_regulator_can_change_status(rdev))
 				return -EPERM;
 
 			ret = _regulator_do_enable(rdev);
@@ -2205,7 +2234,7 @@ static int _regulator_disable(struct regulator_dev *rdev)
 	    (rdev->constraints && !rdev->constraints->always_on)) {
 
 		/* we are last user */
-		if (regulator_ops_is_valid(rdev, REGULATOR_CHANGE_STATUS)) {
+		if (_regulator_can_change_status(rdev)) {
 			ret = _notifier_call_chain(rdev,
 						   REGULATOR_EVENT_PRE_DISABLE,
 						   NULL);
@@ -2226,7 +2255,10 @@ static int _regulator_disable(struct regulator_dev *rdev)
 
 		rdev->use_count = 0;
 	} else if (rdev->use_count > 1) {
-		if (regulator_ops_is_valid(rdev, REGULATOR_CHANGE_DRMS))
+
+		if (rdev->constraints &&
+			(rdev->constraints->valid_ops_mask &
+			REGULATOR_CHANGE_DRMS))
 			drms_uA_update(rdev);
 
 		rdev->use_count--;
@@ -2334,6 +2366,14 @@ static void regulator_disable_work(struct work_struct *work)
 	count = rdev->deferred_disables;
 	rdev->deferred_disables = 0;
 
+	/*
+	 * Workqueue functions queue the new work instance while the previous
+	 * work instance is being processed. Cancel the queued work instance
+	 * as the work instance under processing does the job of the queued
+	 * work instance.
+	 */
+	cancel_delayed_work(&rdev->disable_work);
+
 	for (i = 0; i < count; i++) {
 		ret = _regulator_disable(rdev);
 		if (ret != 0)
@@ -2368,7 +2408,6 @@ static void regulator_disable_work(struct work_struct *work)
 int regulator_disable_deferred(struct regulator *regulator, int ms)
 {
 	struct regulator_dev *rdev = regulator->rdev;
-	int ret;
 
 	if (regulator->always_on)
 		return 0;
@@ -2378,15 +2417,11 @@ int regulator_disable_deferred(struct regulator *regulator, int ms)
 
 	mutex_lock(&rdev->mutex);
 	rdev->deferred_disables++;
+	mod_delayed_work(system_power_efficient_wq, &rdev->disable_work,
+			 msecs_to_jiffies(ms));
 	mutex_unlock(&rdev->mutex);
 
-	ret = queue_delayed_work(system_power_efficient_wq,
-				 &rdev->disable_work,
-				 msecs_to_jiffies(ms));
-	if (ret < 0)
-		return ret;
-	else
-		return 0;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(regulator_disable_deferred);
 
@@ -2477,7 +2512,8 @@ int regulator_can_change_voltage(struct regulator *regulator)
 {
 	struct regulator_dev	*rdev = regulator->rdev;
 
-	if (regulator_ops_is_valid(rdev, REGULATOR_CHANGE_VOLTAGE)) {
+	if (rdev->constraints &&
+	    (rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_VOLTAGE)) {
 		if (rdev->desc->n_voltages - rdev->desc->linear_min_sel > 1)
 			return 1;
 
@@ -2665,7 +2701,7 @@ int regulator_is_supported_voltage(struct regulator *regulator,
 	int i, voltages, ret;
 
 	/* If we can't change voltage check the current voltage */
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_VOLTAGE)) {
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_VOLTAGE)) {
 		ret = regulator_get_voltage(regulator);
 		if (ret >= 0)
 			return min_uV <= ret && ret <= max_uV;
@@ -2871,7 +2907,7 @@ static int regulator_set_voltage_unlocked(struct regulator *regulator,
 	 * return successfully even though the regulator does not support
 	 * changing the voltage.
 	 */
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_VOLTAGE)) {
+	if (!(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_VOLTAGE)) {
 		current_uV = _regulator_get_voltage(rdev);
 		if (min_uV <= current_uV && current_uV <= max_uV) {
 			regulator->min_uV = min_uV;
@@ -3387,7 +3423,8 @@ int regulator_allow_bypass(struct regulator *regulator, bool enable)
 	if (!rdev->desc->ops->set_bypass)
 		return 0;
 
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_BYPASS))
+	if (rdev->constraints &&
+	    !(rdev->constraints->valid_ops_mask & REGULATOR_CHANGE_BYPASS))
 		return 0;
 
 	mutex_lock(&rdev->mutex);
@@ -3422,7 +3459,7 @@ int regulator_allow_bypass(struct regulator *regulator, bool enable)
 }
 EXPORT_SYMBOL_GPL(regulator_allow_bypass);
 
-/**
+/*
  * regulator_register_ocp_notification - register ocp notification
  * @regulator: regulator source
  * @notification: pointer of client ocp_notification
@@ -4803,7 +4840,7 @@ static int __init regulator_late_cleanup(struct device *dev, void *data)
 	if (c && c->always_on)
 		return 0;
 
-	if (!regulator_ops_is_valid(rdev, REGULATOR_CHANGE_STATUS))
+	if (c && !(c->valid_ops_mask & REGULATOR_CHANGE_STATUS))
 		return 0;
 
 	mutex_lock(&rdev->mutex);

@@ -12,7 +12,7 @@
  */
 /*
  * NOTE: This file has been modified by Sony Mobile Communications Inc.
- * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
  * and licensed under the license of the file.
  */
 /*
@@ -1579,8 +1579,8 @@ int32_t qpnp_adc_scale_therm_pu2(struct qpnp_vadc_chip *dev, int32_t adc_code,
 			const struct qpnp_vadc_chan_properties *chan_prop,
 			struct qpnp_vadc_result *chan_rslt);
 /**
- * qpnp_adc_scale_therm_pu2_decidegc() - Scales the pre-calibrated digital output
- *		of an ADC to the ADC reference and compensates for the
+ * qpnp_adc_scale_therm_pu2_decidegc() - Scales the pre-calibrated digital
+ *		output of an ADC to the ADC reference and compensates for the
  *		gain and offset.
  *		Returns the temperature of the therm in decidegC.
  *		It uses a mapping table computed for a 100K pull-up.
@@ -2037,7 +2037,7 @@ static inline int32_t qpnp_adc_scale_therm_pu2(struct qpnp_vadc_chip *vadc,
 			struct qpnp_vadc_result *chan_rslt)
 { return -ENXIO; }
 static inline int32_t qpnp_adc_scale_therm_pu2_decidegc(
-			struct qpnp_vadc_chip *vadc, int32_t adc_code,
+			struct qpnp_vadc_chip *dev, int32_t adc_code,
 			const struct qpnp_adc_properties *adc_prop,
 			const struct qpnp_vadc_chan_properties *chan_prop,
 			struct qpnp_vadc_result *chan_rslt)

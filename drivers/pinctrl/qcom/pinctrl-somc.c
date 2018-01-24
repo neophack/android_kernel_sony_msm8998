@@ -97,3 +97,5 @@ static void __exit somc_pinctrl_drv_unregister(void)
 module_exit(somc_pinctrl_drv_unregister);
 
 MODULE_LICENSE("GPL v2");
+
+

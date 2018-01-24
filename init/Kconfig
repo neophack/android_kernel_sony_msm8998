@@ -395,6 +395,7 @@ endchoice
 config SCHED_WALT
         bool "Support window based load tracking"
         depends on SMP
+        depends on FAIR_GROUP_SCHED
         help
         This feature will allow the scheduler to maintain a tunable window
 	based set of metrics for tasks and runqueues. These metrics can be
@@ -1334,6 +1335,16 @@ config SCHED_TUNE
 
 	  If unsure, say N.
 
+config DEFAULT_USE_ENERGY_AWARE
+	bool "Default to enabling the Energy Aware Scheduler feature"
+	default n
+	help
+	  This option defaults the ENERGY_AWARE scheduling feature to true,
+	  as without SCHED_DEBUG set this feature can't be enabled or disabled
+	  via sysctl.
+
+	  Say N if unsure.
+
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
 	depends on SYSFS
@@ -1671,21 +1682,6 @@ config AIO
 	  This option enables POSIX asynchronous I/O which may by used
 	  by some high performance threaded applications. Disabling
 	  this option saves about 7k.
-
-config AIO_SSD_ONLY
-	bool "Tune AIO performance for SSDs" if EXPERT
-	default n
-	depends on AIO
-	help
-	  Solid state storage have no head to move and no location
-	  to "physically reach", as the block is being retrieved
-	  in the exact moment we request it.
-	  Optimize Asynchronous IO for those conditions.
-
-	  Enabling this option on systems with rotational drives
-	  WILL be resulting in bad storage performance.
-
-	  If you've got ONLY SSDs, say Y. If unsure, say N.
 
 config ADVISE_SYSCALLS
 	bool "Enable madvise/fadvise syscalls" if EXPERT

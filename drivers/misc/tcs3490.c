@@ -123,53 +123,54 @@
 #define RGBCIR_SENSOR_SYSFS_LINK_NAME "rgbcir_sensor"
 #define RGBCIR_SENSOR_PINCTRL_IRQ_ACTIVE "rgbcir_irq_active"
 #define RGBCIR_SENSOR_PINCTRL_IRQ_SUSPEND "rgbcir_irq_suspend"
+#define RGBCIR_SENSOR_REGULATOR_NOTIFY_PRIORITY (1000)
 
 enum tcs3490_regs {
     TCS3490_CONTROL,
-    TCS3490_ALS_TIME,              // 0x81
+    TCS3490_ALS_TIME,                  // 0x81
     TCS3490_RESV_1,
-    TCS3490_WAIT_TIME,             // 0x83
-    TCS3490_ALS_MINTHRESHLO,       // 0x84
-    TCS3490_ALS_MINTHRESHHI,       // 0x85
-    TCS3490_ALS_MAXTHRESHLO,       // 0x86
-    TCS3490_ALS_MAXTHRESHHI,       // 0x87
-    TCS3490_RESV_2,                // 0x88
-    TCS3490_PRX_MINTHRESHLO,       // 0x89 -> Not used for TCS3490
+    TCS3490_WAIT_TIME,               // 0x83
+    TCS3490_ALS_MINTHRESHLO,   // 0x84
+    TCS3490_ALS_MINTHRESHHI,   // 0x85
+    TCS3490_ALS_MAXTHRESHLO,  // 0x86
+    TCS3490_ALS_MAXTHRESHHI,  // 0x87
+    TCS3490_RESV_2,                     // 0x88
+    TCS3490_PRX_MINTHRESHLO,  // 0x89 -> Not used for TCS3490 
 
-    TCS3490_RESV_3,                // 0x8A
-    TCS3490_PRX_MAXTHRESHHI,       // 0x8B  -> Not used for TCS3490
-    TCS3490_PERSISTENCE,           // 0x8C
-    TCS3490_CONFIG,                // 0x8D
-    TCS3490_PRX_PULSE_COUNT,       // 0x8E  -> Not used for TCS3490
-    TCS3490_GAIN,                  // 0x8F  : Gain Control Register
-    TCS3490_AUX,                   // 0x90
+    TCS3490_RESV_3,                    // 0x8A 
+    TCS3490_PRX_MAXTHRESHHI, // 0x8B  -> Not used for TCS3490 
+    TCS3490_PERSISTENCE,          // 0x8C   
+    TCS3490_CONFIG,                    // 0x8D
+    TCS3490_PRX_PULSE_COUNT,  // 0x8E  -> Not used for TCS3490
+    TCS3490_GAIN,                        // 0x8F  : Gain Control Register  
+    TCS3490_AUX,                          // 0x90  
     TCS3490_REVID,
     TCS3490_CHIPID,
-    TCS3490_STATUS,                // 0x93
+    TCS3490_STATUS,                    // 0x93
 
     TCS3490_CLR_CHANLO,            // 0x94
     TCS3490_CLR_CHANHI,            // 0x95
-    TCS3490_RED_CHANLO,            // 0x96
-    TCS3490_RED_CHANHI,            // 0x97
-    TCS3490_GRN_CHANLO,            // 0x98
-    TCS3490_GRN_CHANHI,            // 0x99
-    TCS3490_BLU_CHANLO,            // 0x9A
-    TCS3490_BLU_CHANHI,            // 0x9B
-    TCS3490_PRX_HI,                // 0x9C
-    TCS3490_PRX_LO,                // 0x9D
+    TCS3490_RED_CHANLO,           // 0x96
+    TCS3490_RED_CHANHI,           // 0x97
+    TCS3490_GRN_CHANLO,           // 0x98
+    TCS3490_GRN_CHANHI,           // 0x99 
+    TCS3490_BLU_CHANLO,           // 0x9A
+    TCS3490_BLU_CHANHI,           // 0x9B
+    TCS3490_PRX_HI,                    // 0x9C
+    TCS3490_PRX_LO,                    // 0x9D
 
     TCS3490_PRX_OFFSET,            // 0x9E
-    TCS3490_RESV_4,                // 0x9F
-    TCS3490_IRBEAM_CFG,            // 0xA0
-    TCS3490_IRBEAM_CARR,           // 0xA1
-    TCS3490_IRBEAM_NS,             // 0xA2
-    TCS3490_IRBEAM_ISD,            // 0xA3
-    TCS3490_IRBEAM_NP,             // 0xA4
+    TCS3490_RESV_4,                    // 0x9F
+    TCS3490_IRBEAM_CFG,            // 0xA0  
+    TCS3490_IRBEAM_CARR,          // 0xA1   
+    TCS3490_IRBEAM_NS,              // 0xA2 
+    TCS3490_IRBEAM_ISD,            // 0xA3 
+    TCS3490_IRBEAM_NP,              // 0xA4
     TCS3490_IRBEAM_IPD,            // 0xA5
     TCS3490_IRBEAM_DIV,            // 0xA6
-    TCS3490_IRBEAM_LEN,            // 0xA7
+    TCS3490_IRBEAM_LEN,            // 0xA7 
 
-    TCS3490_IRBEAM_STAT,           // 0xA8
+    TCS3490_IRBEAM_STAT,         // 0xA8
 
     TCS3490_REG_COLOR_BINLO=0x55,  // 0xD5
     TCS3490_REG_COLOR_BINHI=0x56,  // 0xD6
@@ -253,17 +254,23 @@ struct tcs3490_chip {
     int irq_pending;
     bool unpowered;
     bool als_enabled;
+	bool is_register_regulator_cam_vio_notify;
 	int als_thres_enabled;
 	int als_switch_ch_enabled;
+	int vdd_supply_enable;
+	int gpio_vdd_enable;
+	int vio_supply_enable;
 
     bool als_gain_auto;
 	u8 als_channel;
     u8 device_index;
 	struct regulator *vdd;
 	struct regulator *gpio_vdd;
+	struct regulator *vio;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *gpio_state_active;
 	struct pinctrl_state *gpio_state_suspend;
+	struct notifier_block cam_io_regulator_cb;
 };
 
 static int tcs3490_power_on(struct tcs3490_chip *chip);
@@ -675,8 +682,7 @@ static int tcs3490_update_als_thres(struct tcs3490_chip *chip, bool on_enable)
 	mutex_unlock(&chip->lock);
 
 	if (!on_enable)
-		/* move deltaP far away from
-		 * current position to force an irq */
+		/* move deltaP far away from current position to force an irq */
 		from = to = cur > saturation / 2 ? 0 : saturation;
 	else {
 		deltaP = cur * deltaP / 100;
@@ -723,13 +729,13 @@ static int tcs3490_check_and_report(struct tcs3490_chip *chip)
 	mutex_unlock(&chip->lock);
 
     saturation = chip->als_inf.saturation;
-
+    
     if ((status & (TCS3490_ST_ALS_VALID | TCS3490_ST_ALS_IRQ)) ==
             (TCS3490_ST_ALS_VALID | TCS3490_ST_ALS_IRQ)) {
-		tcs3490_get_als_setup_next(chip);
+	tcs3490_get_als_setup_next(chip);
         tcs3490_irq_clr(chip, TCS3490_CMD_ALS_INT_CLR);
-		if (chip->als_thres_enabled)
-			tcs3490_update_als_thres(chip, 1);
+	if (chip->als_thres_enabled)
+		tcs3490_update_als_thres(chip, 1);
     }
 
 exit_clr:
@@ -812,7 +818,7 @@ static ssize_t tcs3490_chip_pow_store(struct device *dev,
 				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				dev_name(&chip->client->dev), chip);
 			if (rc) {
-				dev_err(&chip->client->dev,
+				dev_info(&chip->client->dev,
 					"Failed to request irq %d\n",
 					chip->client->irq);
 				(void)pinctrl_select_state(chip->pinctrl,
@@ -1259,26 +1265,67 @@ static const struct attribute_group tcs3490_attr_group = {
 	.attrs = tcs3490_attributes,
 };
 
+static int tcs3490_sensor_cam_io_notifier_call(struct notifier_block *self,
+	unsigned long event, void *data)
+{
+	struct tcs3490_chip *chip;
+	uint32_t rc;
+
+	if (event & REGULATOR_EVENT_DISABLE) {
+		chip = container_of(self, struct tcs3490_chip, cam_io_regulator_cb);
+		dev_info(&chip->client->dev,
+			"%s REGULATOR_EVENT_DISABLE occurred event \n", __func__);
+		if (chip->vdd_supply_enable)
+			rc = regulator_disable(chip->vdd);
+		else if (chip->gpio_vdd_enable)
+			rc = regulator_disable(chip->gpio_vdd);
+		if (!rc) {
+			chip->unpowered = true;
+			dev_info(&chip->client->dev,
+				"%s: Regulator vdd disable OK", __func__);
+		} else {
+			dev_err(&chip->client->dev,
+				"%s: Regulator vdd disable failed", __func__);
+		}
+	}
+	return NOTIFY_OK;
+}
+
 static int tcs3490_pltf_power_on(struct tcs3490_chip *chip)
 {
 	int rc = 0;
 
 	mutex_lock(&chip->lock);
-	rc = regulator_enable(chip->vdd);
+	if (chip->vdd_supply_enable)
+		rc = regulator_enable(chip->vdd);
+	else if (chip->gpio_vdd_enable)
+		rc = regulator_enable(chip->gpio_vdd);
 	if (rc) {
 		dev_err(&chip->client->dev,
 		"Regulator vdd enable failed rc=%d\n", rc);
 		chip->unpowered = true;
 		mutex_unlock(&chip->lock);
-	}
-	if (!rc) {
-		if (chip->gpio_vdd)
-			rc = regulator_enable(chip->gpio_vdd);
+	} else {
+		if (chip->is_register_regulator_cam_vio_notify) {
+			regulator_unregister_notifier(chip->vio,
+				&(chip->cam_io_regulator_cb));
+			chip->is_register_regulator_cam_vio_notify = false;
+		}
+		if (chip->vio_supply_enable)
+			rc = regulator_enable(chip->vio);
+		if (rc) {
+			dev_err(&chip->client->dev,
+			"%s: Regulator vio enable failed rc=%d\n", __func__, rc);
+			chip->unpowered = true;
+			mutex_unlock(&chip->lock);
+		}
 	}
 	if (!rc) {
 		dev_dbg(&chip->client->dev,
 		"%s: rgbcir, power init, regulator enable OK\n", __func__);
+
 		/* Enable Oscillator */
+		usleep_range(1000, 1000);
 		tcs3490_i2c_write(chip, TCS3490_CONTROL, 0x01);
 		mutex_unlock(&chip->lock);
 		usleep_range(10000, 11000);
@@ -1300,8 +1347,11 @@ static int tcs3490_power_on(struct tcs3490_chip *chip)
 	tcs3490_set_defaults(chip);
 	rc = tcs3490_flush_regs(chip);
 
-	if (!rc)
+	if (!rc) {
 		chip->unpowered = false;
+	} else {
+		tcs3490_pltf_power_off(chip);
+	}
 
     return rc;
 }
@@ -1309,19 +1359,100 @@ static int tcs3490_power_on(struct tcs3490_chip *chip)
 static int tcs3490_pltf_power_off(struct tcs3490_chip *chip)
 {
 	int rc = 0;
+	int rc2 = 0;
 
 	mutex_lock(&chip->lock);
 	/* Disable Oscillator */
 	tcs3490_i2c_write(chip, TCS3490_CONTROL, 0x00);
 	usleep_range(3000, 4000);
-	if (chip->gpio_vdd) {
-		(void)regulator_disable(chip->gpio_vdd);
+	if (chip->vio_supply_enable && !chip->is_register_regulator_cam_vio_notify) {
+		chip->cam_io_regulator_cb.notifier_call = tcs3490_sensor_cam_io_notifier_call;
+		chip->cam_io_regulator_cb.priority = RGBCIR_SENSOR_REGULATOR_NOTIFY_PRIORITY;
+		if (regulator_register_notifier(chip->vio, &(chip->cam_io_regulator_cb)))
+			dev_err(&chip->client->dev,
+				"%s Regulator notification registration failed!\n", __func__);
+		else
+			chip->is_register_regulator_cam_vio_notify = true;
 	}
-	rc = regulator_disable(chip->vdd);
+	if (chip->vio_supply_enable) {
+		rc2 = regulator_disable(chip->vio);
+		if (rc2)
+			dev_err(&chip->client->dev,
+				"%s: Regulator vio disable failed", __func__);
+		else
+			dev_info(&chip->client->dev,
+				"%s: Regulator vio disable OK", __func__);
+	}
+	if (!chip->is_register_regulator_cam_vio_notify) {
+		if (chip->vdd_supply_enable)
+			rc = regulator_disable(chip->vdd);
+		else if (chip->gpio_vdd_enable)
+			rc = regulator_disable(chip->gpio_vdd);
 
-	if (!rc)
-		chip->unpowered = true;
+		if (!rc && !rc2)
+			chip->unpowered = true;
+	}
 	mutex_unlock(&chip->lock);
+	return rc;
+}
+
+
+static int tcs3490_power_init(struct tcs3490_chip *chip)
+{
+	int rc = 0;
+	if (!chip)
+		return -EINVAL;
+	chip->unpowered = true;
+	if (chip->vdd_supply_enable) {
+		chip->vdd = regulator_get(&chip->client->dev, "rgbcir_vdd");
+		if (IS_ERR(chip->vdd)) {
+			rc = PTR_ERR(chip->vdd);
+			dev_err(&chip->client->dev,
+				"Regulator get failed, vdd, rc = %d\n", rc);
+			return rc;
+		}
+	} else if (chip->gpio_vdd_enable) {
+		chip->gpio_vdd = regulator_get(&chip->client->dev, "rgbcir-gpio-vdd");
+		if (IS_ERR(chip->gpio_vdd)) {
+			rc = PTR_ERR(chip->gpio_vdd);
+			dev_err(&chip->client->dev,
+				"Gpio-Regulator get failed,gpio_vdd, rc = %d\n", rc);
+			return rc;
+		}
+	}
+	if (chip->vio_supply_enable) {
+		chip->vio = regulator_get(&chip->client->dev, "rgbcir-vio");
+		if (IS_ERR(chip->vio)) {
+			rc = PTR_ERR(chip->vio);
+			dev_err(&chip->client->dev,
+				"%s: Regulator get failed,vio, rc = %d\n", __func__, rc);
+			return rc;
+		}
+	}
+	chip->is_register_regulator_cam_vio_notify = false;
+	dev_info(&chip->client->dev,
+		"%s: rgbcir, power init, regulator get OK vdd=%d, gpio_vdd=%d, vio=%d\n", __func__, chip->vdd_supply_enable, chip->gpio_vdd_enable, chip->vio_supply_enable);
+	return rc;
+}
+
+static int tcs3490_power_deinit(struct tcs3490_chip *chip)
+{
+	int rc = 0;
+	if (!chip)
+		return -EINVAL;
+	chip->unpowered = true;
+	if (chip->vio_supply_enable && chip->vio) {
+		regulator_put(chip->vio);
+	}
+	if (chip->is_register_regulator_cam_vio_notify) {
+		regulator_unregister_notifier(chip->vio, &(chip->cam_io_regulator_cb));
+		chip->is_register_regulator_cam_vio_notify = false;
+	}
+	if (chip->vdd_supply_enable && chip->vdd) {
+		regulator_put(chip->vdd);
+	} else if (chip->gpio_vdd_enable && chip->gpio_vdd) {
+		regulator_put(chip->gpio_vdd);
+	}
 	return rc;
 }
 
@@ -1330,6 +1461,7 @@ static int tcs3490_probe(struct i2c_client *client,
 {
 	struct tcs3490_chip *chip;
 	int rc = 0;
+	uint32_t val_u32;
 
 	dev_info(&client->dev, "start probing tcs3490\n");
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -1358,43 +1490,47 @@ static int tcs3490_probe(struct i2c_client *client,
 		if (rc) {
 			dev_err(&client->dev,
 				"%s: failed to pinctrl init\n", __func__);
-			goto init_failed;
+			goto pinctrl_init_failed;
 		}
 	}
+
 	dev_info(&chip->client->dev, "tcs3490: Initializing mutex\n");
 	mutex_init(&chip->lock);
-	chip->vdd = regulator_get(&chip->client->dev, "rgbcir_vdd");
-	if (IS_ERR(chip->vdd)) {
-		rc = PTR_ERR(chip->vdd);
-		dev_err(&chip->client->dev,
-			"Regulator get failed,avdd, rc = %d\n", rc);
-		goto init_failed;
+
+	rc = of_property_read_u32(client->dev.of_node,
+		"ams,rgbcir-vdd-supply", &val_u32);
+	if (rc < 0) {
+		dev_err(&client->dev, "%s failed %d\n", __func__, __LINE__);
+		goto pinctrl_init_failed;
 	}
-	chip->gpio_vdd = NULL;
-	if (chip->client->dev.of_node) {
-		int count = 0;
-		count = of_property_count_strings(chip->client->dev.of_node,
-			"ams,rgbcir-gpio-vreg-name");
-		if (count) {
-			chip->gpio_vdd = regulator_get(&chip->client->dev,
-				"rgbcir_gpio_vdd");
-			if (IS_ERR(chip->gpio_vdd)) {
-				rc = PTR_ERR(chip->vdd);
-				dev_err(&chip->client->dev,
-				"Regulator get failed,avdd, rc = %d\n", rc);
-				goto init_failed;
-			}
-		}
+	chip->vdd_supply_enable = val_u32;
+
+	rc = of_property_read_u32(client->dev.of_node,
+		"ams,rgbcir-gpio-vdd", &val_u32);
+	if (rc < 0) {
+		dev_err(&client->dev, "%s failed %d\n", __func__, __LINE__);
+		goto pinctrl_init_failed;
 	}
-	dev_info(&chip->client->dev,
-		"%s: rgbcir, power init, regulator get OK\n", __func__);
-	chip->unpowered = true;
+	chip->gpio_vdd_enable = val_u32;
+
+	rc = of_property_read_u32(client->dev.of_node,
+		"ams,rgbcir-vio-supply", &val_u32);
+	if (rc < 0) {
+		dev_err(&client->dev, "%s failed %d\n", __func__, __LINE__);
+		goto pinctrl_init_failed;
+	}
+	chip->vio_supply_enable = val_u32;
+
+	rc = tcs3490_power_init(chip);
+	if (rc)
+		goto pinctrl_init_failed;
+
 	chip->a_idev = input_allocate_device();
 	if (!chip->a_idev) {
 		rc = -ENOMEM;
 		dev_err(&client->dev,
 		"%s: failed to allocate input device", __func__);
-		kfree(chip);
+		goto allocate_device_failed;
 	}
 	chip->a_idev->name = "AMS TCS3490 Sensor";
 
@@ -1414,7 +1550,7 @@ static int tcs3490_probe(struct i2c_client *client,
 	if (rc) {
 		dev_err(&client->dev,
 		"failed to register input device");
-		goto exit_free_dev_ps;
+		goto register_device_failed;
 	}
 	input_set_drvdata(chip->a_idev, chip);
 	dev_info(&chip->client->dev, "tcs3490: i2c nr %d\n",
@@ -1426,7 +1562,7 @@ static int tcs3490_probe(struct i2c_client *client,
 		rc = -ENOMEM;
 		dev_err(&client->dev,
 			"%s: failed to create sysfs group", __func__);
-		goto exit_unregister_dev_ps;
+		goto create_group_failed;
 	}
 
 	rc = sysfs_create_link(chip->a_idev->dev.kobj.parent,
@@ -1435,21 +1571,25 @@ static int tcs3490_probe(struct i2c_client *client,
 		rc = -ENOMEM;
 		dev_err(&client->dev,
 			"%s: failed to create sysfs link", __func__);
-		goto exit_unregister_dev_ps;
+		goto create_link_failed;
 	}
 
 	dev_info(&client->dev, "Probe ok.\n");
 	return 0;
 
+create_link_failed:
+	sysfs_remove_group(&chip->a_idev->dev.kobj,
+		&tcs3490_attr_group);
+create_group_failed:
+	input_unregister_device(chip->a_idev);
+register_device_failed:
+	input_free_device(chip->a_idev);
+allocate_device_failed:
+	tcs3490_power_deinit(chip);
+pinctrl_init_failed:
+	kfree(chip);
 init_failed:
 	dev_err(&client->dev, "Probe failed.\n");
-	return rc;
-
-exit_unregister_dev_ps:
-	input_unregister_device(chip->a_idev);
-exit_free_dev_ps:
-	input_free_device(chip->a_idev);
-	kfree(chip);
 	return rc;
 }
 
@@ -1458,6 +1598,8 @@ static int tcs3490_remove(struct i2c_client *client)
     struct tcs3490_chip *chip = i2c_get_clientdata(client);
 	sysfs_remove_link(&chip->a_idev->dev.kobj,
 		RGBCIR_SENSOR_SYSFS_LINK_NAME);
+	sysfs_remove_group(&chip->a_idev->dev.kobj,
+		&tcs3490_attr_group);
     free_irq(client->irq, chip);
     if (chip->a_idev) {
         input_unregister_device(chip->a_idev);

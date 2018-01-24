@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -345,48 +345,6 @@ static void disable_unprepare_rcg_srcs(struct clk *c, struct clk *curr,
 	clk_unprepare(curr);
 	if (c->prepare_count)
 		clk_unprepare(curr);
-}
-
-static int rcg_clk_set_duty_cycle(struct clk *c, u32 numerator,
-				u32 denominator)
-{
-	struct rcg_clk *rcg = to_rcg_clk(c);
-	u32 notn_m_val, n_val, m_val, d_val, not2d_val;
-	u32 max_n_value;
-
-	if (!numerator || numerator == denominator)
-		return -EINVAL;
-
-	if (!rcg->mnd_reg_width)
-		rcg->mnd_reg_width = 8;
-
-	max_n_value = 1 << (rcg->mnd_reg_width - 1);
-
-	notn_m_val = readl_relaxed(N_REG(rcg));
-	m_val = readl_relaxed(M_REG(rcg));
-	n_val = ((~notn_m_val) + m_val) & BM((rcg->mnd_reg_width - 1), 0);
-
-	if (n_val > max_n_value) {
-		pr_warn("%s duty-cycle cannot be set for required frequency %ld\n",
-				c->dbg_name, clk_get_rate(c));
-		return -EINVAL;
-	}
-
-	/* Calculate the 2d value */
-	d_val = DIV_ROUND_CLOSEST((numerator * n_val * 2),  denominator);
-
-	/* Check BIT WIDTHS OF 2d.  If D is too big reduce Duty cycle. */
-	if (d_val > (BIT(rcg->mnd_reg_width) - 1)) {
-		d_val = (BIT(rcg->mnd_reg_width) - 1) / 2;
-		d_val *= 2;
-	}
-
-	not2d_val = (~d_val) & BM((rcg->mnd_reg_width - 1), 0);
-
-	writel_relaxed(not2d_val, D_REG(rcg));
-	rcg_update_config(rcg);
-
-	return 0;
 }
 
 static int rcg_clk_set_rate(struct clk *c, unsigned long rate)
@@ -1381,34 +1339,6 @@ static struct frac_entry frac_table_810m[] = { /* Link rate of 162M */
 	{0, 0},
 };
 
-static bool is_same_rcg_config(struct rcg_clk *rcg, struct clk_freq_tbl *freq,
-			       bool has_mnd)
-{
-	u32 cfg;
-
-	/* RCG update pending */
-	if (readl_relaxed(CMD_RCGR_REG(rcg)) & CMD_RCGR_CONFIG_DIRTY_MASK)
-		return false;
-	if (has_mnd)
-		if (readl_relaxed(M_REG(rcg)) != freq->m_val ||
-		    readl_relaxed(N_REG(rcg)) != freq->n_val ||
-		    readl_relaxed(D_REG(rcg)) != freq->d_val)
-			return false;
-	/*
-	 * Both 0 and 1 represent same divider value in HW.
-	 * Always use 0 to simplify comparison.
-	 */
-	if ((freq->div_src_val & CFG_RCGR_DIV_MASK) == 1)
-		freq->div_src_val &= ~CFG_RCGR_DIV_MASK;
-	cfg = readl_relaxed(CFG_RCGR_REG(rcg));
-	if ((cfg & CFG_RCGR_DIV_MASK) == 1)
-		cfg &= ~CFG_RCGR_DIV_MASK;
-	if (cfg != freq->div_src_val)
-		return false;
-
-	return true;
-}
-
 static int set_rate_edp_pixel(struct clk *clk, unsigned long rate)
 {
 	struct rcg_clk *rcg = to_rcg_clk(clk);
@@ -1446,8 +1376,7 @@ static int set_rate_edp_pixel(struct clk *clk, unsigned long rate)
 			pixel_freq->d_val = ~frac->den;
 		}
 		spin_lock_irqsave(&local_clock_reg_lock, flags);
-		if (!is_same_rcg_config(rcg, pixel_freq, true))
-			__set_rate_mnd(rcg, pixel_freq);
+		__set_rate_mnd(rcg, pixel_freq);
 		spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 		return 0;
 	}
@@ -1508,8 +1437,7 @@ static int set_rate_byte(struct clk *clk, unsigned long rate)
 	byte_freq->div_src_val |= BVAL(4, 0, div);
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	if (!is_same_rcg_config(rcg, byte_freq, false))
-		__set_rate_hid(rcg, byte_freq);
+	__set_rate_hid(rcg, byte_freq);
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 
 	return 0;
@@ -1589,8 +1517,8 @@ static int set_rate_pixel(struct clk *clk, unsigned long rate)
 {
 	struct rcg_clk *rcg = to_rcg_clk(clk);
 	struct clk_freq_tbl *pixel_freq = rcg->current_freq;
-	int frac_num[] = {3, 2, 4, 1};
-	int frac_den[] = {8, 9, 9, 1};
+	int frac_num[] = {1, 2, 4, 3, 2};
+	int frac_den[] = {1, 3, 9, 8, 9};
 	int delta = 100000;
 	int i, rc;
 
@@ -1830,8 +1758,7 @@ static int rcg_clk_set_rate_dp(struct clk *clk, unsigned long rate)
 	}
 
 	spin_lock_irqsave(&local_clock_reg_lock, flags);
-	if (!is_same_rcg_config(rcg, freq_tbl, true))
-		__set_rate_mnd(rcg, freq_tbl);
+	__set_rate_mnd(rcg, freq_tbl);
 	spin_unlock_irqrestore(&local_clock_reg_lock, flags);
 	return 0;
 }
@@ -2308,7 +2235,6 @@ struct clk_ops clk_ops_rcg_mnd = {
 	.enable = rcg_clk_enable,
 	.disable = rcg_clk_disable,
 	.set_rate = rcg_clk_set_rate,
-	.set_duty_cycle = rcg_clk_set_duty_cycle,
 	.list_rate = rcg_clk_list_rate,
 	.round_rate = rcg_clk_round_rate,
 	.handoff = rcg_mnd_clk_handoff,

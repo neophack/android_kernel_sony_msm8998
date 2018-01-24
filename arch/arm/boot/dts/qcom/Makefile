@@ -1,28 +1,3 @@
-# MSM8998
-dtb-$(CONFIG_MACH_SONY_LILAC) += msm8998-v2-yoshino-lilac_generic.dtb
-dtb-$(CONFIG_MACH_SONY_LILAC) += msm8998-v2.1-yoshino-lilac_generic.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE) += msm8998-v2-yoshino-maple_generic.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE) += msm8998-v2.1-yoshino-maple_generic.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE_DSDS) += msm8998-v2-yoshino-maple_dsds.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE_DSDS) += msm8998-v2.1-yoshino-maple_dsds.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR) += msm8998-v2-yoshino-poplar_generic.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR) += msm8998-v2.1-yoshino-poplar_generic.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR_DSDS) += msm8998-v2-yoshino-poplar_dsds.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR_DSDS) += msm8998-v2.1-yoshino-poplar_dsds.dtb
-
-# MSM8996
-dtb-$(CONFIG_MACH_SONY_DORA)            += msm8996-v3.0-pmi8996-tone-dora_generic.dtb
-dtb-$(CONFIG_MACH_SONY_DORA)            += msm8996-v3-pmi8996-tone-dora_generic.dtb
-dtb-$(CONFIG_MACH_SONY_KAGURA)          += msm8996-v3.0-pmi8996-tone-kagura_generic.dtb
-dtb-$(CONFIG_MACH_SONY_KAGURA)          += msm8996-v3-pmi8996-tone-kagura_generic.dtb
-dtb-$(CONFIG_MACH_SONY_KEYAKI)          += msm8996-v3.0-pmi8996-tone-keyaki_generic.dtb
-dtb-$(CONFIG_MACH_SONY_KEYAKI)          += msm8996-v3-pmi8996-tone-keyaki_generic.dtb
-
-# MSM8956
-dtb-$(CONFIG_MACH_SONY_SUZU)            += msm8956-v1.1-loire-suzu_generic.dtb
-dtb-$(CONFIG_MACH_SONY_KUGO)            += msm8956-v1.1-loire-kugo_generic.dtb
-
-ifneq ($(CONFIG_ARCH_SONY_TONE),y)
 dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996-v2-pmi8994-mtp.dtb \
 	msm8996-v2-pmi8994-pmk8001-cdp.dtb \
@@ -35,6 +10,7 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996-v2-liquid.dtb \
 	msm8996-v2-dtp.dtb \
 	msm8996-v3-auto-cdp.dtb \
+	msm8996-v3-auto-adp.dtb \
 	msm8996-v3-pmi8994-cdp.dtb \
 	msm8996-v3-pmi8994-mtp.dtb \
 	msm8996-v3-pmi8994-pmk8001-cdp.dtb \
@@ -52,6 +28,10 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996-v3-dtp.dtb \
 	msm8996-v3-pm8004-mmxf-adp.dtb \
 	msm8996-v3-pm8004-agave-adp.dtb \
+	msm8996-v3-pm8004-agave-adp-lite.dtb \
+	msm8996pro-auto-adp.dtb \
+	msm8996pro-auto-adp-lite.dtb \
+	msm8996pro-auto-cdp.dtb \
 	msm8996pro-pmi8994-cdp.dtb \
 	msm8996pro-pmi8994-mtp.dtb \
 	msm8996pro-pmi8994-pmk8001-cdp.dtb \
@@ -64,6 +44,7 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996pro-pmi8996-mtp.dtb \
 	msm8996pro-pmi8996-pmk8001-cdp.dtb \
 	msm8996pro-pmi8996-pmk8001-mtp.dtb \
+	msm8996pro-v1.1-auto-cdp.dtb \
 	msm8996pro-v1.1-pmi8994-cdp.dtb \
 	msm8996pro-v1.1-pmi8994-mtp.dtb \
 	msm8996pro-v1.1-pmi8994-pmk8001-cdp.dtb \
@@ -76,7 +57,11 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996pro-v1.1-pmi8996-mtp.dtb \
 	msm8996pro-v1.1-pmi8996-pmk8001-cdp.dtb \
 	msm8996pro-v1.1-pmi8996-pmk8001-mtp.dtb \
+	apq8096pro-auto-cdp.dtb \
+	apq8096pro-v1.1-auto-adp.dtb \
+	apq8096pro-v1.1-auto-adp-lite.dtb \
 	apq8096pro-liquid.dtb \
+	apq8096pro-v1.1-auto-cdp.dtb \
 	msm8996-v3.0-pmi8994-cdp.dtb \
 	msm8996-v3.0-pmi8994-mtp.dtb \
 	msm8996-v3.0-pmi8994-pm8004-cdp.dtb \
@@ -107,6 +92,8 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	apq8096-v3-dragonboard.dtb \
 	apq8096-v3-sbc.dtb \
 	apq8096-v3-auto-dragonboard.dtb \
+	apq8096-v3-auto-adp.dtb \
+	apq8096-v3-auto-cdp.dtb \
 	apq8096-v3.0-pmi8994-cdp.dtb \
 	apq8096-v3.0-pmi8994-mtp.dtb \
 	apq8096-v3.0-pmi8994-pm8004-cdp.dtb \
@@ -126,9 +113,32 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	apq8096-v3-pmi8996-mdm9x55-i2s-mtp.dtb \
 	apq8096-v3-pmi8996-mdm9x55-slimbus-mtp.dtb \
 	apq8096-v3-pmi8996-dragonboard.dtb
-endif
+
+dtb-$(CONFIG_MSM_GVM_QUIN) += vplatform-lfv-msm8996.dtb
 
 ifneq ($(CONFIG_ARCH_SONY_YOSHINO),y)
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+dtbo-$(CONFIG_ARCH_MSM8998) += \
+	msm8998-cdp-overlay.dtbo \
+	msm8998-mtp-overlay.dtbo \
+	msm8998-v2-cdp-overlay.dtbo \
+	msm8998-v2-mtp-overlay.dtbo \
+	msm8998-v2.1-cdp-overlay.dtbo \
+	msm8998-v2.1-mtp-overlay.dtbo \
+	msm8998-qrd-overlay.dtbo \
+	msm8998-qrd-vr1-overlay.dtbo \
+	msm8998-qrd-skuk-overlay.dtbo
+
+msm8998-cdp-overlay.dtbo-base :=  msm8998.dtb
+msm8998-mtp-overlay.dtbo-base :=  msm8998.dtb
+msm8998-v2-cdp-overlay.dtbo-base :=  msm8998-v2.dtb
+msm8998-v2-mtp-overlay.dtbo-base :=  msm8998-v2.dtb
+msm8998-v2.1-cdp-overlay.dtbo-base :=  msm8998-v2.1.dtb
+msm8998-v2.1-mtp-overlay.dtbo-base :=  msm8998-v2.1.dtb
+msm8998-qrd-overlay.dtbo-base :=  msm8998-qrd.dtb
+msm8998-qrd-vr1-overlay.dtbo-base :=  msm8998-qrd-vr1.dtb
+msm8998-qrd-skuk-overlay.dtbo-base :=  msm8998-qrd-skuk.dtb
+else
 dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	msm8998-rumi.dtb \
 	msm8998-cdp.dtb \
@@ -145,22 +155,44 @@ dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	msm8998-v2-qrd-vr1.dtb \
 	msm8998-v2-qrd-skuk-evt3.dtb \
 	msm8998-v2-qrd-skuk-hdk.dtb \
-	apq8998-mtp.dtb \
-	apq8998-cdp.dtb \
-	apq8998-v2-mtp.dtb \
-	apq8998-v2-cdp.dtb \
-	apq8998-v2-qrd.dtb \
-	apq8998-v2-qrd-skuk-hdk.dtb \
+	apq8098-mtp.dtb \
+	apq8098-cdp.dtb \
+	apq8098-v2-mtp.dtb \
+	apq8098-v2-cdp.dtb \
+	apq8098-v2-qrd.dtb \
+	apq8098-v2-qrd-skuk-hdk.dtb \
 	msm8998-v2.1-mtp.dtb \
+	msm8998-v2.1-mtp-4k-display.dtb \
 	msm8998-v2.1-cdp.dtb \
 	msm8998-v2.1-qrd.dtb \
-	apq8998-v2.1-mtp.dtb \
-	apq8998-v2.1-cdp.dtb \
-	apq8998-v2.1-qrd.dtb \
-	apq8998-v2.1-mediabox.dtb \
+	apq8098-v2.1-mtp.dtb \
+	apq8098-v2.1-cdp.dtb \
+	apq8098-v2.1-qrd.dtb \
+	apq8098-v2.1-mediabox.dtb \
+	apq8098-v2.1-svr20.dtb \
 	msm8998-v2.1-interposer-sdm660-cdp.dtb \
 	msm8998-v2.1-interposer-sdm660-mtp.dtb \
-	msm8998-v2.1-interposer-sdm660-qrd.dtb
+	msm8998-v2.1-interposer-sdm660-qrd.dtb \
+	msm8998-9x55-rcm.dtb \
+	msm8998-9x55-cdp.dtb \
+	msm8998-9x55-mtp.dtb
+endif
+else
+dtb-$(CONFIG_MACH_SONY_MAPLE) += msm8998-yoshino-maple_generic.dtb \
+	msm8998-v2-yoshino-maple_generic.dtb \
+	msm8998-v2.1-yoshino-maple_generic.dtb
+dtb-$(CONFIG_MACH_SONY_MAPLE_DSDS) += msm8998-yoshino-maple_dsds.dtb \
+	msm8998-v2-yoshino-maple_dsds.dtb \
+	msm8998-v2.1-yoshino-maple_dsds.dtb
+dtb-$(CONFIG_MACH_SONY_POPLAR) += msm8998-yoshino-poplar_generic.dtb \
+	msm8998-v2-yoshino-poplar_generic.dtb \
+	msm8998-v2.1-yoshino-poplar_generic.dtb
+dtb-$(CONFIG_MACH_SONY_POPLAR_DSDS) += msm8998-yoshino-poplar_dsds.dtb \
+	msm8998-v2-yoshino-poplar_dsds.dtb \
+	msm8998-v2.1-yoshino-poplar_dsds.dtb
+dtb-$(CONFIG_MACH_SONY_LILAC) += msm8998-yoshino-lilac_generic.dtb \
+	msm8998-v2-yoshino-lilac_generic.dtb \
+	msm8998-v2.1-yoshino-lilac_generic.dtb
 endif
 
 dtb-$(CONFIG_ARCH_MSMHAMSTER) += msmhamster-rumi.dtb
@@ -189,11 +221,13 @@ dtb-$(CONFIG_ARCH_SDM660) += sdm660-sim.dtb \
 	sda660-pm660a-cdp.dtb \
 	sda660-pm660a-mtp.dtb \
 	sda660-pm660a-rcm.dtb \
+	sda660-pm660a-qrd-hdk.dtb \
 	sdm660-headset-jacktype-no-cdp.dtb \
 	sdm660-headset-jacktype-no-rcm.dtb \
 	sdm660-pm660a-headset-jacktype-no-cdp.dtb \
 	sdm660-pm660a-headset-jacktype-no-rcm.dtb \
 	sdm660-usbc-audio-mtp.dtb \
+	sdm660-usbc-audio-rcm.dtb \
 	sdm658-mtp.dtb \
 	sdm658-cdp.dtb \
 	sdm658-rcm.dtb \
@@ -219,6 +253,7 @@ dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 	sdm630-pm660a-rumi.dtb \
 	sdm630-mtp.dtb \
 	sdm630-usbc-audio-mtp.dtb \
+	sdm630-usbc-audio-rcm.dtb \
 	sdm630-cdp.dtb \
 	sdm630-rcm.dtb \
 	sdm630-internal-codec-mtp.dtb \
@@ -237,6 +272,7 @@ dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 	sda630-pm660a-mtp.dtb \
 	sda630-pm660a-cdp.dtb \
 	sda630-pm660a-rcm.dtb \
+	sda630-pm660a-qrd-hdk.dtb \
 	sdm630-headset-jacktype-no-cdp.dtb \
 	sdm630-headset-jacktype-no-rcm.dtb \
 	sdm630-pm660a-headset-jacktype-no-cdp.dtb \
@@ -244,6 +280,7 @@ dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
+always          += $(dtbo-y)
 subdir-y        := $(dts-dirs)
 else
 targets += dtbs
@@ -254,4 +291,4 @@ $(obj)/../%.dtb: $(src)/%.dts FORCE
 
 dtbs: $(addprefix $(obj)/../,$(dtb-y))
 endif
-clean-files := *.dtb
+clean-files := *.dtbo *.dtb

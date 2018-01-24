@@ -6,6 +6,11 @@
  *
  * This file contains driver APIs to the irq subsystem.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2015 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #define pr_fmt(fmt) "genirq: " fmt
 
@@ -633,32 +638,6 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 	return ret;
 }
 EXPORT_SYMBOL(irq_set_irq_wake);
-
-/**
- *     irq_read_line - read the value on an irq line
- *     @irq: Interrupt number representing a hardware line
- *
- *     This function is meant to be called from within the irq handler.
- *     Slowbus irq controllers might sleep, but it is assumed that the irq
- *     handler for slowbus interrupts will execute in thread context, so
- *     sleeping is okay.
- */
-int irq_read_line(unsigned int irq)
-{
-	struct irq_desc *desc = irq_to_desc(irq);
-	int val;
-
-	if (!desc || !desc->irq_data.chip->irq_read_line)
-		return -EINVAL;
-
-	chip_bus_lock(desc);
-	raw_spin_lock(&desc->lock);
-	val = desc->irq_data.chip->irq_read_line(&desc->irq_data);
-	raw_spin_unlock(&desc->lock);
-	chip_bus_sync_unlock(desc);
-	return val;
-}
-EXPORT_SYMBOL_GPL(irq_read_line);
 
 /*
  * Internal function that tells the architecture code whether a
@@ -1331,8 +1310,10 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			ret = __irq_set_trigger(desc,
 						new->flags & IRQF_TRIGGER_MASK);
 
-			if (ret)
+			if (ret) {
+				irq_release_resources(desc);
 				goto out_mask;
+			}
 		}
 
 		desc->istate &= ~(IRQS_AUTODETECT | IRQS_SPURIOUS_DISABLED | \

@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2014 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 #ifndef __Q6_ADM_V2_H__
 #define __Q6_ADM_V2_H__
 
@@ -17,6 +22,7 @@
 #define ADM_PATH_LIVE_REC 0x2
 #define ADM_PATH_NONLIVE_REC 0x3
 #define ADM_PATH_COMPRESSED_RX 0x5
+#define ADM_PATH_COMPRESSED_TX 0x6
 #include <linux/qdsp6v2/rtac.h>
 #include <sound/q6afe-v2.h>
 #include <sound/q6audio-v2.h>
@@ -34,7 +40,6 @@ enum {
 	ADM_AUDVOL_CAL,
 	ADM_RTAC_INFO_CAL,
 	ADM_RTAC_APR_CAL,
-	ADM_DTS_EAGLE,
 	ADM_SRS_TRUMEDIA,
 	ADM_RTAC_AUDVOL_CAL,
 	ADM_MAX_CAL_TYPES
@@ -51,6 +56,13 @@ enum {
 	ADM_CLIENT_ID_MAX,
 };
 
+/* ENUM for adm_status & route_status */
+enum adm_status_flags {
+	ADM_STATUS_CALIBRATION_REQUIRED = 0,
+	ADM_STATUS_LIMITER,
+	ADM_STATUS_MAX,
+};
+
 #define MAX_COPPS_PER_PORT 0x8
 #define ADM_MAX_CHANNELS 8
 
@@ -61,9 +73,27 @@ struct route_payload {
 	int app_type[MAX_COPPS_PER_PORT];
 	int acdb_dev_id[MAX_COPPS_PER_PORT];
 	int sample_rate[MAX_COPPS_PER_PORT];
+	unsigned long route_status[MAX_COPPS_PER_PORT];
 	unsigned short num_copps;
 	unsigned int session_id;
 };
+
+struct default_chmixer_param_id_coeff {
+	uint32_t index;
+	uint16_t num_output_channels;
+	uint16_t num_input_channels;
+};
+
+struct msm_pcm_channel_mixer {
+	int output_channel;
+	int input_channels[ADM_MAX_CHANNELS];
+	bool enable;
+	int rule;
+	int channel_weight[ADM_MAX_CHANNELS][ADM_MAX_CHANNELS];
+};
+
+int adm_matrix_mute(int port_id, int session_id, uint32_t ramp_duration,
+		uint32_t mute_flag_ch1, uint32_t mute_flag_ch2);
 
 int srs_trumedia_open(int port_id, int copp_idx, __s32 srs_tech_id,
 		      void *srs_params);
@@ -84,6 +114,9 @@ int adm_send_params_v5(int port_id, int copp_idx, char *params,
 
 int adm_dolby_dap_send_params(int port_id, int copp_idx, char *params,
 			      uint32_t params_length);
+
+int adm_ahc_send_params(int port_id, int copp_idx, char *params,
+			uint32_t params_length);
 
 int adm_open(int port, int path, int rate, int mode, int topology,
 			   int perf_mode, uint16_t bits_per_sample,
@@ -124,9 +157,13 @@ int adm_get_topology_for_port_copp_idx(int port_id, int copp_idx);
 
 int adm_get_indexes_from_copp_id(int copp_id, int *port_idx, int *copp_idx);
 
-int adm_set_stereo_to_custom_stereo(int port_id, int copp_idx,
-				    unsigned int session_id,
-				    char *params, uint32_t params_length);
+int adm_set_pspd_matrix_params(int port_id, int copp_idx,
+				unsigned int session_id,
+				char *params, uint32_t params_length);
+
+int adm_set_downmix_params(int port_id, int copp_idx,
+				unsigned int session_id, char *params,
+				uint32_t params_length);
 
 int adm_get_pp_topo_module_list(int port_id, int copp_idx, int32_t param_length,
 				char *params);
@@ -164,4 +201,10 @@ int adm_get_sound_focus(int port_id, int copp_idx,
 			struct sound_focus_param *soundFocusData);
 int adm_get_source_tracking(int port_id, int copp_idx,
 			    struct source_tracking_param *sourceTrackingData);
+int adm_swap_speaker_channels(int port_id, int copp_idx, int sample_rate,
+				bool spk_swap);
+int adm_programable_channel_mixer(int port_id, int copp_idx, int session_id,
+			int session_type,
+			struct msm_pcm_channel_mixer *ch_mixer,
+			int channel_index);
 #endif /* __Q6_ADM_V2_H__ */

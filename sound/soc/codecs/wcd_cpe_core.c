@@ -9,6 +9,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2016 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #include <linux/module.h>
 #include <linux/firmware.h>
@@ -822,6 +827,8 @@ static int wcd_cpe_enable(struct wcd_cpe_core *core,
 		bool enable)
 {
 	int ret = 0;
+	int timeout = 0;
+	int err_cnt = 0;
 
 	if (enable) {
 		/* Reset CPE first */
@@ -844,8 +851,19 @@ static int wcd_cpe_enable(struct wcd_cpe_core *core,
 		if (ret)
 			goto fail_boot;
 
-		/* Dload data section */
-		ret = wcd_cpe_load_fw(core, ELF_FLAG_RW);
+		for (err_cnt = 0; err_cnt < 10; err_cnt++) {
+			/* Dload data section */
+			ret = wcd_cpe_load_fw(core, ELF_FLAG_RW);
+			if (ret) {
+				pr_err("%s: wcd_cpe_load_fw error ret=%d. retry.\n", __func__, ret);
+				msleep(5);
+			} else {
+				if (err_cnt > 0) {
+					pr_err("%s: wcd_cpe_load_fw error count=%d.\n", __func__, err_cnt);
+				}
+				break;
+			}
+		}
 		if (ret) {
 			dev_err(core->dev,
 				"%s: Failed to dload data section, err = %d\n",
@@ -874,9 +892,18 @@ static int wcd_cpe_enable(struct wcd_cpe_core *core,
 		dev_dbg(core->dev,
 			"%s: waiting for CPE bootup\n",
 			__func__);
-
+#if 0
 		wait_for_completion(&core->online_compl);
-
+#else
+		timeout = wait_for_completion_timeout(&core->online_compl, msecs_to_jiffies(1000));
+		if (!timeout) {
+			dev_err(core->dev,
+				"%s: Timeout boot CPE.\n",
+				__func__);
+			ret = -ETIMEDOUT;
+			goto fail_boot;
+		}
+#endif
 		dev_dbg(core->dev,
 			"%s: CPE bootup done\n",
 			__func__);
@@ -1189,11 +1216,9 @@ static irqreturn_t svass_exception_irq(int irq, void *data)
 			dev_err(core->dev,
 				"%s: CPE SSR event,err_status = 0x%02x\n",
 				__func__, status);
-#ifdef CONFIG_SND_SOC_WCD_CPE_SOMC_EXT
 			core->ssr_entry.err_status = status;
 			core->ssr_entry.err_data_ready = 1;
 			wake_up(&core->ssr_entry.err_status_debug_q);
-#endif /* CONFIG_SND_SOC_WCD_CPE_SOMC_EXT */
 			wcd_cpe_ssr_event(core, WCD_CPE_SSR_EVENT);
 			/*
 			 * If fatal interrupt is received,
@@ -1678,7 +1703,6 @@ done:
 	return ret;
 }
 
-#ifdef CONFIG_SND_SOC_WCD_CPE_SOMC_EXT
 static ssize_t cpe_err_status_read(struct file *filp, char __user *ubuf,
 		size_t cnt, loff_t *ppos)
 {
@@ -1716,7 +1740,6 @@ static const struct file_operations cpe_err_status_fops = {
 	.read = cpe_err_status_read,
 	.poll = cpe_err_status_poll,
 };
-#endif /* CONFIG_SND_SOC_WCD_CPE_SOMC_EXT */
 
 static int wcd_cpe_debugfs_init(struct wcd_cpe_core *core)
 {
@@ -1753,7 +1776,6 @@ static int wcd_cpe_debugfs_init(struct wcd_cpe_core *core)
 		goto err_create_entry;
 	}
 
-#ifdef CONFIG_SND_SOC_WCD_CPE_SOMC_EXT
 	if (!debugfs_create_file("err_status", S_IRUGO,
 				dir, core, &cpe_err_status_fops)) {
 		dev_err(core->dev, "%s: Failed to create debugfs node %s\n",
@@ -1765,7 +1787,6 @@ static int wcd_cpe_debugfs_init(struct wcd_cpe_core *core)
 	init_waitqueue_head(&core->ssr_entry.err_status_debug_q);
 
 	return 0;
-#endif /* CONFIG_SND_SOC_WCD_CPE_SOMC_EXT */
 
 err_create_entry:
 	debugfs_remove(dir);
@@ -1790,10 +1811,10 @@ static ssize_t fw_name_store(struct wcd_cpe_core *core,
 	if (pos)
 		copy_count = pos - buf;
 
-	if (copy_count > WCD_CPE_IMAGE_FNAME_MAX) {
+	if (copy_count > (WCD_CPE_IMAGE_FNAME_MAX - 1)) {
 		dev_err(core->dev,
 			"%s: Invalid length %d, max allowed %d\n",
-			__func__, copy_count, WCD_CPE_IMAGE_FNAME_MAX);
+			__func__, copy_count, WCD_CPE_IMAGE_FNAME_MAX - 1);
 		return -EINVAL;
 	}
 
@@ -3607,13 +3628,15 @@ static int wcd_cpe_lsm_lab_control(
 {
 	struct wcd_cpe_core *core = core_handle;
 	int ret = 0, pld_size = CPE_PARAM_SIZE_LSM_LAB_CONTROL;
-	struct cpe_lsm_control_lab cpe_lab_enable= {{0}};
+	struct cpe_lsm_control_lab cpe_lab_enable;
 	struct cpe_lsm_lab_enable *lab_enable = &cpe_lab_enable.lab_enable;
 	struct cpe_param_data *param_d = &lab_enable->param;
 	struct cpe_lsm_ids ids;
 
 	pr_debug("%s: enter payload_size = %d Enable %d\n",
 		 __func__, pld_size, enable);
+
+	memset(&cpe_lab_enable, 0, sizeof(cpe_lab_enable));
 
 	if (fill_lsm_cmd_header_v0_inband(&cpe_lab_enable.hdr, session->id,
 		(u8) pld_size, CPE_LSM_SESSION_CMD_SET_PARAMS_V2)) {

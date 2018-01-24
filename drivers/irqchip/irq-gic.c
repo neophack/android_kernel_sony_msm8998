@@ -89,10 +89,6 @@ struct gic_chip_data {
 
 static DEFINE_RAW_SPINLOCK(irq_controller_lock);
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-static DEFINE_RAW_SPINLOCK(gic_sgi_lock);
-#endif
-
 /*
  * The GIC mapping of CPU interfaces does not necessarily match
  * the logical CPU numbering.  Let's use a mapping as returned
@@ -226,17 +222,6 @@ static void gic_unmask_irq(struct irq_data *d)
 	raw_spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-static void gic_disable_irq(struct irq_data *d)
-{
-	/* don't lazy-disable PPIs */
-	if (gic_irq(d) < 32)
-		gic_mask_irq(d);
-	if (gic_arch_extn.irq_disable)
-		gic_arch_extn.irq_disable(d);
-}
-#endif
-
 static void gic_eoi_irq(struct irq_data *d)
 {
 	if (gic_arch_extn.irq_eoi) {
@@ -245,7 +230,7 @@ static void gic_eoi_irq(struct irq_data *d)
 		raw_spin_unlock(&irq_controller_lock);
 	}
 
-	writel_relaxed_no_log(gic_irq(d), gic_cpu_base(d) + GIC_CPU_EOI);
+	writel_relaxed(gic_irq(d), gic_cpu_base(d) + GIC_CPU_EOI);
 }
 
 static void gic_eoimode1_eoi_irq(struct irq_data *d)
@@ -376,8 +361,8 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	raw_spin_lock_irqsave(&irq_controller_lock, flags);
 	mask = 0xff << shift;
 	bit = gic_cpu_map[cpu] << shift;
-	val = readl_relaxed_no_log(reg) & ~mask;
-	writel_relaxed_no_log(val | bit, reg);
+	val = readl_relaxed(reg) & ~mask;
+	writel_relaxed(val | bit, reg);
 	raw_spin_unlock_irqrestore(&irq_controller_lock, flags);
 
 	return IRQ_SET_MASK_OK;
@@ -406,7 +391,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 	void __iomem *cpu_base = gic_data_cpu_base(gic);
 
 	do {
-		irqstat = readl_relaxed_no_log(cpu_base + GIC_CPU_INTACK);
+		irqstat = readl_relaxed(cpu_base + GIC_CPU_INTACK);
 		irqnr = irqstat & GICC_IAR_INT_ID_MASK;
 
 		if (likely(irqnr > 15 && irqnr < 1021)) {
@@ -416,7 +401,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 			continue;
 		}
 		if (irqnr < 16) {
-			writel_relaxed_no_log(irqstat, cpu_base + GIC_CPU_EOI);
+			writel_relaxed(irqstat, cpu_base + GIC_CPU_EOI);
 			if (static_key_true(&supports_deactivate))
 				writel_relaxed(irqstat, cpu_base + GIC_CPU_DEACTIVATE);
 #ifdef CONFIG_SMP
@@ -473,9 +458,6 @@ static struct irq_chip gic_chip = {
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= gic_set_affinity,
 #endif
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	.irq_disable		= gic_disable_irq,
-#endif
 	.irq_set_wake		= gic_set_wake,
 	.irq_get_irqchip_state	= gic_irq_get_irqchip_state,
 	.irq_set_irqchip_state	= gic_irq_set_irqchip_state,
@@ -492,9 +474,6 @@ static struct irq_chip gic_eoimode1_chip = {
 	.irq_set_type		= gic_set_type,
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= gic_set_affinity,
-#endif
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	.irq_disable		= gic_disable_irq,
 #endif
 	.irq_get_irqchip_state	= gic_irq_get_irqchip_state,
 	.irq_set_irqchip_state	= gic_irq_set_irqchip_state,
@@ -734,15 +713,15 @@ static void gic_cpu_save(unsigned int gic_nr)
 
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_enable);
 	for (i = 0; i < DIV_ROUND_UP(32, 32); i++)
-		ptr[i] = readl_relaxed_no_log(dist_base + GIC_DIST_ENABLE_SET + i * 4);
+		ptr[i] = readl_relaxed(dist_base + GIC_DIST_ENABLE_SET + i * 4);
 
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_active);
 	for (i = 0; i < DIV_ROUND_UP(32, 32); i++)
-		ptr[i] = readl_relaxed_no_log(dist_base + GIC_DIST_ACTIVE_SET + i * 4);
+		ptr[i] = readl_relaxed(dist_base + GIC_DIST_ACTIVE_SET + i * 4);
 
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_conf);
 	for (i = 0; i < DIV_ROUND_UP(32, 16); i++)
-		ptr[i] = readl_relaxed_no_log(dist_base + GIC_DIST_CONFIG + i * 4);
+		ptr[i] = readl_relaxed(dist_base + GIC_DIST_CONFIG + i * 4);
 
 }
 
@@ -762,41 +741,29 @@ static void gic_cpu_restore(unsigned int gic_nr)
 	if (!dist_base || !cpu_base)
 		return;
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_conf);
-	for (i = 0; i < DIV_ROUND_UP(32, 16); i++)
-		writel_relaxed_no_log(ptr[i], dist_base + GIC_DIST_CONFIG + i * 4);
-
-	for (i = 0; i < DIV_ROUND_UP(32, 4); i++)
-		writel_relaxed_no_log(GICD_INT_DEF_PRI_X4,
-					dist_base + GIC_DIST_PRI + i * 4);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
-
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_enable);
 	for (i = 0; i < DIV_ROUND_UP(32, 32); i++) {
-		writel_relaxed_no_log(GICD_INT_EN_CLR_X32,
+		writel_relaxed(GICD_INT_EN_CLR_X32,
 			       dist_base + GIC_DIST_ENABLE_CLEAR + i * 4);
-		writel_relaxed_no_log(ptr[i], dist_base + GIC_DIST_ENABLE_SET + i * 4);
+		writel_relaxed(ptr[i], dist_base + GIC_DIST_ENABLE_SET + i * 4);
 	}
 
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_active);
 	for (i = 0; i < DIV_ROUND_UP(32, 32); i++) {
-		writel_relaxed_no_log(GICD_INT_EN_CLR_X32,
+		writel_relaxed(GICD_INT_EN_CLR_X32,
 			       dist_base + GIC_DIST_ACTIVE_CLEAR + i * 4);
-		writel_relaxed_no_log(ptr[i], dist_base + GIC_DIST_ACTIVE_SET + i * 4);
+		writel_relaxed(ptr[i], dist_base + GIC_DIST_ACTIVE_SET + i * 4);
 	}
 
-#ifndef CONFIG_MSM_LEGACY_QGIC
 	ptr = raw_cpu_ptr(gic_data[gic_nr].saved_ppi_conf);
 	for (i = 0; i < DIV_ROUND_UP(32, 16); i++)
-		writel_relaxed_no_log(ptr[i], dist_base + GIC_DIST_CONFIG + i * 4);
+		writel_relaxed(ptr[i], dist_base + GIC_DIST_CONFIG + i * 4);
 
 	for (i = 0; i < DIV_ROUND_UP(32, 4); i++)
-		writel_relaxed_no_log(GICD_INT_DEF_PRI_X4,
+		writel_relaxed(GICD_INT_DEF_PRI_X4,
 					dist_base + GIC_DIST_PRI + i * 4);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
 
-	writel_relaxed_no_log(GICC_INT_PRI_THRESHOLD, cpu_base + GIC_CPU_PRIMASK);
+	writel_relaxed(GICC_INT_PRI_THRESHOLD, cpu_base + GIC_CPU_PRIMASK);
 	gic_cpu_if_up(&gic_data[gic_nr]);
 }
 
@@ -874,11 +841,7 @@ static void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 	int cpu;
 	unsigned long flags, map = 0;
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	raw_spin_lock_irqsave(&gic_sgi_lock, flags);
-#else
 	raw_spin_lock_irqsave(&irq_controller_lock, flags);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
 
 	/* Convert our logical CPU mask into a physical one. */
 	for_each_cpu(cpu, mask)
@@ -893,11 +856,7 @@ static void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 	/* this always happens on GIC0 */
 	writel_relaxed(map << 16 | irq, gic_data_dist_base(&gic_data[0]) + GIC_DIST_SOFTINT);
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	raw_spin_unlock_irqrestore(&gic_sgi_lock, flags);
-#else
 	raw_spin_unlock_irqrestore(&irq_controller_lock, flags);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
 }
 #endif
 
@@ -967,9 +926,6 @@ void gic_migrate_target(unsigned int new_cpu_id)
 	ror_val = (cur_cpu_id - new_cpu_id) & 31;
 
 	raw_spin_lock(&irq_controller_lock);
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	raw_spin_lock(&gic_sgi_lock);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
 
 	/* Update the target interface for this logical CPU */
 	gic_cpu_map[cpu] = 1 << new_cpu_id;
@@ -989,9 +945,6 @@ void gic_migrate_target(unsigned int new_cpu_id)
 		}
 	}
 
-#ifdef CONFIG_MSM_LEGACY_QGIC
-	raw_spin_unlock(&gic_sgi_lock);
-#endif /* CONFIG_MSM_LEGACY_QGIC */
 	raw_spin_unlock(&irq_controller_lock);
 
 	/*

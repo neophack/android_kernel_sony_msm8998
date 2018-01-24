@@ -6,6 +6,11 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+/*
+ * NOTE: This file has been modified by Sony Mobile Communications Inc.
+ * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ * and licensed under the license of the file.
+ */
 
 #ifndef _UNIPRO_H_
 #define _UNIPRO_H_
@@ -119,11 +124,9 @@
 #define PA_STALLNOCONFIGTIME	0x15A3
 #define PA_SAVECONFIGTIME	0x15A4
 
-#ifdef CONFIG_ARCH_SONY_YOSHINO
 #define PA_TxHsG1SyncLength	0x1552
 #define PA_TxHsG2SyncLength	0x1554
 #define PA_TxHsG3SyncLength	0x1556
-#endif
 
 #define PA_TACTIVATE_TIME_UNIT_US	10
 #define PA_HIBERN8_TIME_UNIT_US		100

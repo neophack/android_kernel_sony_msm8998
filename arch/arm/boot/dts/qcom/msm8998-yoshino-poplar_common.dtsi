@@ -18,8 +18,7 @@
  */
 
 #include "msm8998-yoshino-common.dtsi"
-#include "msm8998-yoshino-poplar_camera.dtsi"
-#include "dsi-panel-somc-poplar.dtsi"
+#include "dsi-panel-poplar.dtsi"
 
 &soc {
 	/* I2C: BLSP5 */
@@ -42,12 +41,97 @@
 		pinctrl-1 = <&msm_gpio_89 &msm_gpio_102 &msm_gpio_103 &msm_gpio_115 &msm_gpio_132
 			     &msm_gpio_133>;
 	};
+	qcom,cci@ca0c000 {
+		qcom,camera@1 {
+			/delete-property/ cam_vio-supply;
+			qcom,cam-vreg-name = "cam_vaf", "cam_vdig", "cam_vio_gpio", "cam_vdig_gpio";
+			qcom,cam-vreg-type = <0 0 0 0>;
+			qcom,cam-vreg-min-voltage = <2700000 1352000 0 0>;
+			qcom,cam-vreg-max-voltage = <2700000 1352000 0 0>;
+			qcom,cam-vreg-op-mode = <150000 105000 0 0>;
+		};
+	};
 
 	mdss_dsi0_pll: qcom,mdss_dsi_pll@c994400 {
 		qcom,dsi-pll-ssc-en;
 		qcom,dsi-pll-ssc-mode = "down-spread";
 		qcom,ssc-frequency-hz = <31500>;
 		qcom,ssc-ppm = <5000>;
+	};
+};
+
+&sony_camera_module_1 {
+	GENERIC {
+		power_off {
+			commands =
+				"GPIO_RESET",
+				"CAM_CLK",
+				"CAM_VDIG_GPIO",
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
+		power_on {
+			commands =
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"CAM_VDIG_GPIO",
+				"CAM_CLK",
+				"GPIO_RESET",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
+	};
+	SOI13BS1 {
+		power_off {
+			commands =
+				"GPIO_RESET",
+				"CAM_CLK",
+				"CAM_VDIG_GPIO",
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
+		power_on {
+			commands =
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"CAM_VDIG_GPIO",
+				"CAM_CLK",
+				"GPIO_RESET",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
+	};
+	SEM13BS1 {
+		power_off {
+			commands =
+				"GPIO_RESET",
+				"CAM_CLK",
+				"CAM_VDIG_GPIO",
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
+		power_on {
+			commands =
+				"CAM_VDIG",
+				"CAM_VIO_GPIO",
+				"CAM_VAF",
+				"CAM_VDIG_GPIO",
+				"CAM_CLK",
+				"GPIO_RESET",
+				"EXIT";
+			/delete-property/ CAM_VIO;
+		};
 	};
 };
 
@@ -92,7 +176,7 @@
 	/delete-property/ qcom,dsi-pref-prim-pan;
 };
 
-/ {
+&vendor {
 	yoshino_poplar_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <17>;
 		#include "fg-gen3-batterydata-poplar-send-4380mv-2650mah.dtsi"
@@ -296,6 +380,11 @@
 &pmi8998_wled {
 	qcom,ilim-ma = <620>;
 	qcom,fs-curr-ua = <20000>;
+	somc,area_count_table_size = <24>;
+	somc,area_count_table = <0 117 234 351 468 585 702 819
+				936 1053 1170 1404 1638 1872 2106
+				2340 2574 2808 3042 3276 3510
+				3744 3978 4095>;
 };
 
 &red_led {
